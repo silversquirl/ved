@@ -5,17 +5,11 @@
 #include <stdlib.h>
 #include <string.h>
 #include "rope.h"
+#include "util.h"
 
 struct rope_attr {
   size_t n, alloc;
 };
-
-typedef unsigned long long biggest_int;
-
-// Returns true if a * b will be greater than max
-static inline bool will_overflow(biggest_int a, biggest_int b, biggest_int max) {
-  return a && b > max / a;
-}
 
 // Returns true if a rope with n sections will overflow a size_t
 static inline bool _rope_will_overflow(size_t n) {
