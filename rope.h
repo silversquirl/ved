@@ -24,7 +24,11 @@
 #include <stddef.h>
 #include <stdio.h>
 
-typedef char **rope;
+struct rope_item {
+  char *s;
+  size_t len;
+};
+typedef struct rope_item *rope;
 
 rope make_rope(size_t n);
 void free_rope(rope r);
@@ -33,5 +37,6 @@ int rope_init(rope *r, ...); // segment1, segment2, ..., NULL
 rope rope_dup(rope r);
 int rope_fprint(rope r, FILE *f);
 #define rope_print(r) rope_fprint(r, stdout)
+char *rope_flatten(rope r, size_t *len); // length is put in len (if not NULL)
 
 #endif

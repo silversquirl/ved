@@ -19,7 +19,7 @@ static inline bool will_overflow(biggest_int a, biggest_int b, biggest_int max) 
 
 // Returns true if a rope with n sections will overflow a size_t
 static inline bool _rope_will_overflow(size_t n) {
-  return will_overflow(n, sizeof (rope), SIZE_MAX - sizeof (size_t));
+  return will_overflow(n, sizeof (struct rope_attr), SIZE_MAX - sizeof (struct rope_attr));
 }
 
 // Returns a pointer to the rope attributes. This can also be used to get
@@ -31,7 +31,7 @@ static inline struct rope_attr *_rope_attr(rope r) {
 
 // Calculates the amount of memory requried for a rope of length n
 static inline size_t _rope_alloclen(size_t n) {
-  return n * sizeof (char *) + sizeof (struct rope_attr);
+  return n * sizeof (struct rope_item) + sizeof (struct rope_attr);
 }
 
 // Reallocates, taking into account the attributes at the start
@@ -83,7 +83,8 @@ int rope_init(rope *rptr, ...) { // segment1, segment2, ..., NULL
       a = _rope_attr(r);
     }
 
-    r[i] = seg;
+    r[i].s = seg;
+    r[i].len = strlen(seg);
     ++i;
   }
   a->n = i;
@@ -104,7 +105,23 @@ rope rope_dup(rope r) {
 int rope_fprint(rope r, FILE *f) {
   size_t len = rope_len(r);
   for (size_t i = 0; i < len; ++i) {
-    if (fputs(r[i], f) == EOF) return -1;
+    if (fputs(r[i].s, f) == EOF) return -1;
   }
   return 0;
+}
+
+char *rope_flatten(rope r, size_t *len) {
+  size_t l = 0, al = 32, rl = rope_len(r);
+  char *buf = malloc(al);
+  for (size_t i = 0; i < rl; ++i) {
+    while (l + r[i].len >= al) {
+      buf = realloc(buf, al *= 2);
+      if (!buf) return NULL;
+    }
+    memcpy(buf + l, r[i].s, r[i].len);
+    l += r[i].len;
+  }
+  if (al != l) buf = realloc(buf, l);
+  if (len) *len = l;
+  return buf;
 }
