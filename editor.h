@@ -4,7 +4,7 @@
 #include "rope.h"
 
 struct editor {
-  rope buffer;
+	rope buffer;
 };
 
 // TODO: make this read a file instead of a string

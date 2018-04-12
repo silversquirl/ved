@@ -25,8 +25,8 @@
 #include <stdio.h>
 
 struct rope_item {
-  char *s;
-  size_t len;
+	char *s;
+	size_t len;
 };
 typedef struct rope_item *rope;
 
