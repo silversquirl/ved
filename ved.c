@@ -7,7 +7,7 @@ void quit(void *ui) {
 
 int main() {
 	struct editor ved;
-	if (editor_init(&ved, "Hello, world!\n")) {
+	if (editor_init(&ved, "Hello, world!\nThis is a test document\nI like Pi\n")) {
 		perror("editor_init");
 		return 1;
 	}

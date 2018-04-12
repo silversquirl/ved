@@ -5,6 +5,8 @@
 #include "ui.h"
 #include "util.h"
 
+#define UI_TEXT_BORDER 5
+
 struct action {
 	KeySym key;
 	void (*press)(void *);
@@ -46,9 +48,13 @@ static void ui_render(struct ui *ui) {
 	char *text = rope_flatten(ui->ved->buffer, &n);
 	pango_layout_set_text(ui->text.layout, text, n);
 
-	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, 5000, 0);
+	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, UI_TEXT_BORDER * PANGO_SCALE, 0);
 
 	XFlush(ui->dpy);
+}
+
+static void ui_resize(struct ui *ui) {
+	pango_layout_set_width(ui->text.layout, ui->dim.w * PANGO_SCALE - UI_TEXT_BORDER * PANGO_SCALE * 2);
 }
 
 static void ui_handle_keypress(struct ui *ui, XKeyEvent e) {
@@ -100,6 +106,7 @@ struct ui *ui_init(struct editor *ved) {
 	PangoFontMap *fm  = pango_xft_get_font_map(ui->dpy, scr);
 	PangoContext *ctx = pango_font_map_create_context(fm);
 	ui->text.layout  = pango_layout_new(ctx);
+	pango_layout_set_wrap(ui->text.layout, PANGO_WRAP_WORD_CHAR);
 
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
 	pango_layout_set_font_description(ui->text.layout, fdesc);
@@ -128,6 +135,7 @@ void ui_mainloop(struct ui *ui) {
 			if (e.xconfigure.width != ui->dim.w || e.xconfigure.height != ui->dim.h) {
 				ui->dim.w = e.xconfigure.width;
 				ui->dim.h = e.xconfigure.height;
+				ui_resize(ui);
 				ui_render(ui);
 			}
 
