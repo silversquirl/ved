@@ -60,8 +60,10 @@ size_t rope_len(rope r) {
 	return _rope_attr(r)->n;
 }
 
-void free_rope(rope r) {
-	free(_rope_attr(r));
+void rope_free(rope r) {
+	struct rope_attr *a = _rope_attr(r);
+	vev_free(a->events.update);
+	free(a);
 }
 
 int rope_init(rope *rptr, ...) { // segment1, segment2, ..., NULL

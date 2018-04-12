@@ -32,7 +32,7 @@ struct rope_item {
 typedef struct rope_item *rope;
 
 rope make_rope(size_t n);
-void free_rope(rope r);
+void rope_free(rope r);
 size_t rope_len(rope r);
 int rope_init(rope *r, ...); // segment1, segment2, ..., NULL
 rope rope_dup(rope r);
