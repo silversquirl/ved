@@ -9,7 +9,7 @@ all: ved
 clean:
 	rm -f ved *.o
 
-ved: ved.o ui.o editor.o rope.o vev.o
+ved: ved.o ui.o editor.o buffer.o vev.o
 	$(CC) -o $@ $^ $(LDFLAGS)
 
 %.o: %.c %.h

@@ -13,6 +13,7 @@ struct event {
 
 struct event *vev_create(void) {
 	struct event *ret = malloc(sizeof *ret);
+	if (!ret) return NULL;
 	ret->first = NULL;
 	ret->last = NULL;
 	return ret;

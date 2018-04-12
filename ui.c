@@ -41,17 +41,50 @@ static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
 	return !XftColorAllocName(ui->dpy, visual, cmap, name, c);
 }
 
-static void ui_redraw_text(rope r, struct ui *ui) {
-	size_t n;
-	char *text = rope_flatten(r, &n);
-	pango_layout_set_text(ui->text.layout, text, n);
+#define LAYOUT_TEXT_LEN_INIT 512
+// Returns -1 if the window is full, the height of the pango layout otherwise
+static inline int ui_load_from(struct ui *ui, const char *buf, size_t len) {
+	const int win_height_pango = ui->dim.h * PANGO_SCALE;
+	int height;
+	size_t n = LAYOUT_TEXT_LEN_INIT;
+
+	do {
+		pango_layout_set_text(ui->text.layout, buf, n < len ? n : len);
+		if (n >= len) break;
+		pango_layout_get_size(ui->text.layout, NULL, &height);
+		n *= 2;
+	} while (height < win_height_pango);
+
+	if (height < win_height_pango) return height;
+	else return 0;
+}
+
+static inline void ui_draw_at(struct ui *ui, int y) {
+	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, UI_TEXT_BORDER * PANGO_SCALE, y);
+}
+
+static inline void ui_draw_text(struct ui *ui) {
+	const struct buffer b = ui->ved->buffer;
+
+	if (b.edit.len) {
+		int h1, h2;
+		h1 = ui_load_from(ui, b.file.buf, b.edit.start);
+		ui_draw_at(ui, 0);
+		if (h1 < 0) return;
+		h2 = ui_load_from(ui, b.edit.buf, b.edit.len);
+		ui_draw_at(ui, h1);
+		if (h2 < 0) return;
+		ui_load_from(ui, b.file.buf + b.edit.end, b.file.len - b.edit.end);
+		ui_draw_at(ui, h1 + h2);
+	} else {
+		ui_load_from(ui, b.file.buf, b.file.len);
+		ui_draw_at(ui, 0);
+	}
 }
 
 static void ui_render(struct ui *ui) {
 	XClearWindow(ui->dpy, ui->w);
-
-	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, UI_TEXT_BORDER * PANGO_SCALE, 0);
-
+	ui_draw_text(ui);
 	XFlush(ui->dpy);
 }
 
@@ -113,8 +146,6 @@ struct ui *ui_init(struct editor *ved) {
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
 	pango_layout_set_font_description(ui->text.layout, fdesc);
 	pango_font_description_free(fdesc);
-	vev_register(rope_events(ui->ved->buffer).update, (vev_handler)ui_redraw_text, ui);
-	ui_redraw_text(ui->ved->buffer, ui);
 
 	// Xft
 	Visual *v = DefaultVisual(ui->dpy, scr);

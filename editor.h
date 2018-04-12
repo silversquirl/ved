@@ -1,13 +1,12 @@
 #ifndef __VED_EDITOR_H__
 #define __VED_EDITOR_H__
 
-#include "rope.h"
+#include "buffer.h"
 
 struct editor {
-	rope buffer;
+	struct buffer buffer;
 };
 
-// TODO: make this read a file instead of a string
-int editor_init(struct editor *ved, char *s);
+int editor_init(struct editor *ved, char *filename);
 
 #endif
