@@ -23,6 +23,7 @@
 
 #include <stddef.h>
 #include <stdio.h>
+#include "vev.h"
 
 struct rope_item {
 	char *s;
@@ -38,5 +39,10 @@ rope rope_dup(rope r);
 int rope_fprint(rope r, FILE *f);
 #define rope_print(r) rope_fprint(r, stdout)
 char *rope_flatten(rope r, size_t *len); // length is put in len (if not NULL)
+
+struct rope_events {
+	struct event *update;
+};
+struct rope_events rope_events(rope r);
 
 #endif

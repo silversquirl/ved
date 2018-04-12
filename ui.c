@@ -41,12 +41,14 @@ static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
 	return !XftColorAllocName(ui->dpy, visual, cmap, name, c);
 }
 
+static void ui_redraw_text(rope r, struct ui *ui) {
+	size_t n;
+	char *text = rope_flatten(r, &n);
+	pango_layout_set_text(ui->text.layout, text, n);
+}
+
 static void ui_render(struct ui *ui) {
 	XClearWindow(ui->dpy, ui->w);
-
-	size_t n;
-	char *text = rope_flatten(ui->ved->buffer, &n);
-	pango_layout_set_text(ui->text.layout, text, n);
 
 	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, UI_TEXT_BORDER * PANGO_SCALE, 0);
 
@@ -111,6 +113,8 @@ struct ui *ui_init(struct editor *ved) {
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
 	pango_layout_set_font_description(ui->text.layout, fdesc);
 	pango_font_description_free(fdesc);
+	vev_register(rope_events(ui->ved->buffer).update, (vev_handler)ui_redraw_text, ui);
+	ui_redraw_text(ui->ved->buffer, ui);
 
 	// Xft
 	Visual *v = DefaultVisual(ui->dpy, scr);

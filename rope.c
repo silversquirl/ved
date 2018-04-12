@@ -9,6 +9,7 @@
 
 struct rope_attr {
 	size_t n, alloc;
+	struct rope_events events;
 };
 
 // Returns true if a rope with n sections will overflow a size_t
@@ -51,6 +52,7 @@ rope make_rope(size_t n) {
 
 	struct rope_attr *a = _rope_attr(r);
 	a->n = 0;
+	a->events.update = vev_create();
 	return r;
 }
 
@@ -82,6 +84,7 @@ int rope_init(rope *rptr, ...) { // segment1, segment2, ..., NULL
 		++i;
 	}
 	a->n = i;
+	vev_dispatch(a->events.update, r);
 	*rptr = r;
 
 	return 0;
@@ -118,4 +121,8 @@ char *rope_flatten(rope r, size_t *len) {
 	if (al != l) buf = realloc(buf, l);
 	if (len) *len = l;
 	return buf;
+}
+
+struct rope_events rope_events(rope r) {
+	return _rope_attr(r)->events;
 }
