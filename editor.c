@@ -12,11 +12,13 @@ static void editor_quit(struct ui *ui, void *d) {
 	ui_quit(ui);
 }
 
+// TODO: mode switching
 const struct command_pair command_mode[] = {
 	{ "<Escape>", editor_quit },
 	{ NULL }
 };
 
+// TODO: edit mode
 const struct command_pair edit_mode[] = {
 	{ NULL }
 };

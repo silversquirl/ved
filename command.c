@@ -1,3 +1,5 @@
+// TODO: modifiers (<Ctrl-A>, <Mod4-@>, etc.)
+// TODO: default key handler (for edit mode)
 #include <stdint.h>
 #include <stdbool.h>
 #include "command.h"

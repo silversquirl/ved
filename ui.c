@@ -35,7 +35,13 @@ static inline void ui_draw_at(struct ui *ui, int y) {
 static inline void ui_draw_text(struct ui *ui) {
 	const struct buffer b = ui->ved->buffer;
 
+	// TODO: only recalculate layouts if they're invalid (buffer has changed
+	//       or window has resized and we need more data)
+	// TODO: configurable tabstops
+	// TODO: alignment detection
+
 	if (b.edit.len) {
+		// TODO: switch to multiple layouts
 		int h1, h2;
 		h1 = ui_load_from(ui, b.file.buf, b.edit.start);
 		ui_draw_at(ui, 0);
@@ -52,6 +58,7 @@ static inline void ui_draw_text(struct ui *ui) {
 }
 
 static void ui_render(struct ui *ui) {
+	// TODO: double buffering
 	XClearWindow(ui->dpy, ui->w);
 	ui_draw_text(ui);
 	XFlush(ui->dpy);
