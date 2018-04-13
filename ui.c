@@ -1,6 +1,6 @@
 #include <errno.h>
 #include "ui.h"
-#include "util.h"
+#include "ui_internal.h"
 
 #define UI_TEXT_BORDER 5
 

@@ -1,18 +1,23 @@
 #include "editor.h"
 #include "ui.h"
+#include "ui_internal.h"
 
-void quit(void *ui) {
-	ui_quit(ui);
-}
-
-void keypress(XKeyEvent *xk, struct ui *ui) {
-	if (XKeysymToKeycode(ui->dpy, XK_Escape) == xk->keycode) ui_quit(ui);
+void handle_keypress(XKeyEvent *xk, struct ui *ui) {
+	cmd_handle_key(ui->ved->modes.current, ui, xk->keycode);
 }
 
 int main() {
 	struct editor ved;
-	if (editor_init(&ved, "ui.c")) {
+	switch (editor_init(&ved, "ui.c")) {
+	case -1:
 		perror("editor_init");
+		return 1;
+
+	case -2:
+		fprintf(stderr, "editor_init: Invalid format for 'keys'\n");
+		return 1;
+	case -3:
+		fprintf(stderr, "editor_init: Command exists\n");
 		return 1;
 	}
 
@@ -22,7 +27,7 @@ int main() {
 		return 1;
 	}
 
-	vev_register(ui->ev.keypress, keypress, ui);
+	vev_register(ui->ev.keypress, handle_keypress, ui);
 	if (errno) {
 		perror("vev_register");
 		return 1;
