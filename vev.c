@@ -29,9 +29,9 @@ void vev_free(struct event *ev) {
 	free(ev);
 }
 
-int vev_register(struct event *ev, vev_handler handler, void *userdata) {
+void vev_register_wrapped(struct event *ev, vev_handler handler, void *userdata) {
 	struct evhandler *h = malloc(sizeof *h);
-	if (!h) return -1;
+	if (!h) return;
 	h->h = handler;
 	h->d = userdata;
 	h->next = NULL;
@@ -40,7 +40,7 @@ int vev_register(struct event *ev, vev_handler handler, void *userdata) {
 	else
 		ev->first = h;
 	ev->last = h;
-	return 0;
+	errno = 0; // No errors
 }
 
 void vev_dispatch(struct event *ev, void *context) {

@@ -1,39 +1,8 @@
 #include <errno.h>
-#include <stdint.h>
-#include <pango/pangoxft.h>
-#include <X11/Xlib.h>
 #include "ui.h"
 #include "util.h"
 
 #define UI_TEXT_BORDER 5
-
-struct action {
-	KeySym key;
-	void (*press)(void *);
-	void (*release)(void *);
-	void *data;
-};
-
-struct ui {
-	struct editor *ved;
-
-	Display *dpy;
-	Window w;
-	struct { unsigned w, h; } dim;
-	bool exit;
-
-	struct {
-		Atom wm_delete_window;
-	} atoms;
-
-	struct action *actions; // Terminated by XK_VoidSymbol
-
-	struct {
-		XftDraw *draw;
-		XftColor fg;
-		PangoLayout *layout;
-	} text;
-};
 
 static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
 	Visual *visual = XftDrawVisual(ui->text.draw);
@@ -92,18 +61,6 @@ static void ui_resize(struct ui *ui) {
 	pango_layout_set_width(ui->text.layout, ui->dim.w * PANGO_SCALE - UI_TEXT_BORDER * PANGO_SCALE * 2);
 }
 
-static void ui_handle_keypress(struct ui *ui, XKeyEvent e) {
-	for (struct action *a = ui->actions; a->key != XK_VoidSymbol; ++a)
-		if (XKeysymToKeycode(ui->dpy, a->key) == e.keycode && a->press)
-			return a->press(a->data);
-}
-
-static void ui_handle_keyrelease(struct ui *ui, XKeyEvent e) {
-	for (struct action *a = ui->actions; a->key != XK_VoidSymbol; ++a)
-		if (XKeysymToKeycode(ui->dpy, a->key) == e.keycode && a->release)
-			return a->release(a->data);
-}
-
 struct ui *ui_init(struct editor *ved) {
 	struct ui *ui = malloc(sizeof *ui);
 	if (!ui) return NULL;
@@ -130,13 +87,6 @@ struct ui *ui_init(struct editor *ved) {
 	ui->atoms.wm_delete_window = XInternAtom(ui->dpy, "WM_DELETE_WINDOW", false);
 	XSetWMProtocols(ui->dpy, ui->w, &ui->atoms.wm_delete_window, 1);
 
-	ui->actions = malloc(sizeof *ui->actions);
-	if (!ui->actions) {
-		free(ui);
-		return NULL;
-	}
-	ui->actions[0] = (struct action){ XK_VoidSymbol };
-
 	// Pango
 	PangoFontMap *fm  = pango_xft_get_font_map(ui->dpy, scr);
 	PangoContext *ctx = pango_font_map_create_context(fm);
@@ -152,6 +102,11 @@ struct ui *ui_init(struct editor *ved) {
 	Colormap cmap = DefaultColormap(ui->dpy, scr);
 	ui->text.draw = XftDrawCreate(ui->dpy, ui->w, v, cmap);
 	ui_colour(ui, &ui->text.fg, "white");
+
+	// vev
+	ui->ev.keypress = vev_create();
+	ui->ev.keyrelease = vev_create();
+	ui->ev.quit = vev_create();
 
 	return ui;
 }
@@ -184,40 +139,22 @@ void ui_mainloop(struct ui *ui) {
 			}
 
 		case KeyPress:
-			ui_handle_keypress(ui, e.xkey);
+			vev_dispatch(ui->ev.keypress, &e.xkey);
 			break;
 
 		case KeyRelease:
-			ui_handle_keyrelease(ui, e.xkey);
+			vev_dispatch(ui->ev.keyrelease, &e.xkey);
 			break;
 
 		case ClientMessage:
-			if (e.xclient.data.l[0] == ui->atoms.wm_delete_window)
-				// Window closed
-				// TODO: have some shut down code here
+			if (e.xclient.data.l[0] == ui->atoms.wm_delete_window) {
 				ui->exit = true;
+				vev_dispatch(ui->ev.quit, &e.xclient);
+			}
 			break;
 		}
 	}
 	XDestroyWindow(ui->dpy, ui->w);
-}
-
-int ui_add_action(struct ui *ui, char *key_name, void (*press)(void *), void (*release)(void *), void *data) {
-	size_t l = 0;
-	for (struct action *a = ui->actions; a->key != XK_VoidSymbol; ++a) ++l;
-
-	if (will_overflow(l + 2, sizeof *ui->actions, SIZE_MAX)) {
-		errno = ENOMEM;
-		return -1;
-	}
-	struct action *a = realloc(ui->actions, (l + 2) * sizeof *ui->actions);
-	if (!a) return -1;
-	ui->actions = a;
-
-	KeySym key_sym = XStringToKeysym(key_name);
-	ui->actions[l] = (struct action){ key_sym, press, release, data };
-	ui->actions[l + 1] = (struct action){ XK_VoidSymbol };
-	return 0;
 }
 
 void ui_quit(struct ui *ui) {
