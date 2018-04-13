@@ -2,7 +2,9 @@
 #include "ui.h"
 #include "ui_internal.h"
 
-void handle_keypress(XKeyEvent *xk, struct ui *ui) {
+void handle_keypress(void *xkp, void *uip) {
+	XKeyEvent *xk = xkp;
+	struct ui *ui = uip;
 	cmd_handle_key(ui->ved->modes.current, ui, xk->keycode);
 }
 
@@ -27,8 +29,7 @@ int main() {
 		return 1;
 	}
 
-	vev_register(ui->ev.keypress, handle_keypress, ui);
-	if (errno) {
+	if (vev_register(ui->ev.keypress, handle_keypress, ui)) {
 		perror("vev_register");
 		return 1;
 	}
