@@ -1,10 +1,12 @@
 // The actual declaration of the ui struct
-// It's in a separate header so we don't need to include Pango and Xlib
-// everywhere that interacts with the UI
+// It's not in ui.h so we don't need to include a bunch of unnecessary
+// headers in every file that interacts with the UI
 
-#include <pango/pangoxft.h>
+#include <pango/pangocairo.h>
 #include <X11/Xlib.h>
 #include "ui.h"
+
+struct colour { double r, g, b; };
 
 struct ui {
 	struct editor *ved;
@@ -19,8 +21,15 @@ struct ui {
 	} atoms;
 
 	struct {
-		XftDraw *draw;
-		XftColor fg;
+		struct colour fg, bg;
+	} colours;
+
+	struct {
+		cairo_surface_t *surf;
+		cairo_t *cr;
+	} draw;
+
+	struct {
 		PangoLayout *l1, *l2, *l3;
 	} text;
 

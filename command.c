@@ -1,7 +1,10 @@
 // TODO: modifiers (<Ctrl-A>, <Mod4-@>, etc.)
 // TODO: default key handler (for edit mode)
+#include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <string.h>
+#include <X11/keysym.h>
 #include "command.h"
 #include "ui_internal.h"
 #include "util.h"

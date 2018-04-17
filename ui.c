@@ -1,13 +1,9 @@
+#include <stdlib.h>
 #include <errno.h>
+#include <cairo-xlib.h>
 #include "ui_internal.h"
 
-#define UI_TEXT_BORDER 5
-
-static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
-	Visual *visual = XftDrawVisual(ui->text.draw);
-	Colormap cmap = XftDrawColormap(ui->text.draw);
-	return !XftColorAllocName(ui->dpy, visual, cmap, name, c);
-}
+#define UI_TEXT_PADDING 5
 
 #define LAYOUT_TEXT_LEN_INIT 512
 static inline void ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, size_t len) {
@@ -36,44 +32,64 @@ static void ui_damage_buffer(unsigned int sec, void *uip) {
 		ui_load_from(ui, ui->text.l2, b.file.buf, b.edit.start);
 }
 
+static inline void ui_set_colour(struct ui *ui, struct colour c) {
+	cairo_set_source_rgb(ui->draw.cr, c.r, c.g, c.b);
+}
+
 static inline void ui_draw_at(struct ui *ui, PangoLayout *l, int y) {
-	pango_xft_render_layout(ui->text.draw, &ui->text.fg, l, UI_TEXT_BORDER * PANGO_SCALE, y);
+	cairo_move_to(ui->draw.cr, 0, y);
+	ui_set_colour(ui, ui->colours.fg);
+	pango_cairo_show_layout(ui->draw.cr, l);
 }
 
 static inline void ui_draw_text(struct ui *ui) {
 	const struct buffer b = ui->ved->buffer;
-	const int win_height_pango = ui->dim.h * PANGO_SCALE;
 
 	// TODO: configurable tabstops
 	// TODO: alignment detection
 
 	int h1;
-	pango_layout_get_size(ui->text.l1, NULL, &h1);
+	pango_layout_get_pixel_size(ui->text.l1, NULL, &h1);
 	ui_draw_at(ui, ui->text.l1, 0);
-	if (h1 > win_height_pango) return;
+	if (h1 > ui->dim.h) return;
 
 	int h2 = 0;
 	if (b.edit.len) {
-		pango_layout_get_size(ui->text.l2, NULL, &h2);
+		pango_layout_get_pixel_size(ui->text.l2, NULL, &h2);
 		ui_draw_at(ui, ui->text.l2, h1);
-		if (h1 + h2 > win_height_pango) return;
+		if (h1 + h2 > ui->dim.h) return;
 	}
 
 	ui_draw_at(ui, ui->text.l3, h1 + h2);
 }
 
 static void ui_render(struct ui *ui) {
-	// TODO: double buffering
-	XClearWindow(ui->dpy, ui->w);
+	cairo_push_group(ui->draw.cr);
+
+	cairo_rectangle(ui->draw.cr, -UI_TEXT_PADDING, 0, ui->dim.w, ui->dim.h);
+	ui_set_colour(ui, ui->colours.bg);
+	cairo_fill(ui->draw.cr);
+
 	ui_draw_text(ui);
+
+	cairo_pop_group_to_source(ui->draw.cr);
+	cairo_paint(ui->draw.cr);
+	cairo_surface_flush(ui->draw.surf);
 	XFlush(ui->dpy);
 }
 
 static void ui_resize(struct ui *ui) {
-	int w = ui->dim.w * PANGO_SCALE - UI_TEXT_BORDER * PANGO_SCALE * 2;
+	cairo_xlib_surface_set_size(ui->draw.surf, ui->dim.w, ui->dim.h);
+
+	pango_cairo_update_layout(ui->draw.cr, ui->text.l1);
+	pango_cairo_update_layout(ui->draw.cr, ui->text.l2);
+	pango_cairo_update_layout(ui->draw.cr, ui->text.l3);
+
+	int w = PANGO_SCALE * (ui->dim.w - UI_TEXT_PADDING * 2);
 	pango_layout_set_width(ui->text.l1, w);
 	pango_layout_set_width(ui->text.l2, w);
 	pango_layout_set_width(ui->text.l3, w);
+
 	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
 }
 
@@ -111,13 +127,21 @@ struct ui *ui_init(struct editor *ved) {
 	ui->atoms.wm_delete_window = XInternAtom(ui->dpy, "WM_DELETE_WINDOW", false);
 	XSetWMProtocols(ui->dpy, ui->w, &ui->atoms.wm_delete_window, 1);
 
+	// Colours
+	ui->colours.fg = (struct colour){ 1, 1, 1 };
+	ui->colours.bg = (struct colour){ 0, 0, 0 };
+
+	// Cairo
+	XWindowAttributes wattr;
+	XGetWindowAttributes(ui->dpy, ui->w, &wattr);
+	ui->draw.surf = cairo_xlib_surface_create(ui->dpy, ui->w, wattr.visual, ui->dim.w, ui->dim.h);
+	ui->draw.cr = cairo_create(ui->draw.surf);
+	cairo_translate(ui->draw.cr, UI_TEXT_PADDING, 0);
+
 	// Pango
-	PangoFontMap *fm  = pango_xft_get_font_map(ui->dpy, scr);
-	PangoContext *ctx = pango_font_map_create_context(fm);
-	ui->text.l1 = pango_layout_new(ctx);
-	ui->text.l2 = pango_layout_new(ctx);
-	ui->text.l3 = pango_layout_new(ctx);
-	g_object_unref(ctx);
+	ui->text.l1 = pango_cairo_create_layout(ui->draw.cr);
+	ui->text.l2 = pango_cairo_create_layout(ui->draw.cr);
+	ui->text.l3 = pango_cairo_create_layout(ui->draw.cr);
 
 	pango_layout_set_wrap(ui->text.l1, PANGO_WRAP_WORD_CHAR);
 	pango_layout_set_wrap(ui->text.l2, PANGO_WRAP_WORD_CHAR);
@@ -128,12 +152,6 @@ struct ui *ui_init(struct editor *ved) {
 	pango_layout_set_font_description(ui->text.l2, fdesc);
 	pango_layout_set_font_description(ui->text.l3, fdesc);
 	pango_font_description_free(fdesc);
-
-	// Xft
-	Visual *v = DefaultVisual(ui->dpy, scr);
-	Colormap cmap = DefaultColormap(ui->dpy, scr);
-	ui->text.draw = XftDrawCreate(ui->dpy, ui->w, v, cmap);
-	ui_colour(ui, &ui->text.fg, "white");
 
 	// Buffer drawing
 	ui->ved->buffer.damage_cb = ui_damage_buffer;
@@ -147,6 +165,11 @@ void ui_free(struct ui *ui) {
 	g_object_unref(ui->text.l1);
 	g_object_unref(ui->text.l2);
 	g_object_unref(ui->text.l3);
+
+	cairo_surface_finish(ui->draw.surf);
+	cairo_destroy(ui->draw.cr);
+	cairo_surface_destroy(ui->draw.surf);
+
 	XDestroyWindow(ui->dpy, ui->w);
 	free(ui);
 }

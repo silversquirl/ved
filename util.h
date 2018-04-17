@@ -3,6 +3,7 @@
 
 #include <errno.h>
 #include <stdbool.h>
+#include <stdlib.h>
 
 typedef unsigned long long biggest_int;
 
