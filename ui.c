@@ -11,8 +11,7 @@ static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
 }
 
 #define LAYOUT_TEXT_LEN_INIT 512
-// Returns -1 if the window is full, the height of the pango layout otherwise
-static inline int ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, size_t len) {
+static inline void ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, size_t len) {
 	const int win_height_pango = ui->dim.h * PANGO_SCALE;
 	int height;
 	size_t n = LAYOUT_TEXT_LEN_INIT;
@@ -23,9 +22,19 @@ static inline int ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, s
 		pango_layout_get_size(l, NULL, &height);
 		n *= 2;
 	} while (height < win_height_pango);
+}
 
-	if (height < win_height_pango) return height;
-	else return 0;
+static void ui_damage_buffer(unsigned int sec, void *uip) {
+	struct ui *ui = uip;
+	const struct buffer b = ui->ved->buffer;
+
+	if (sec & BUF_SEC_FILE) {
+		ui_load_from(ui, ui->text.l1, b.file.buf, b.edit.start);
+		ui_load_from(ui, ui->text.l3, b.file.buf + b.edit.start, b.file.len - b.edit.end);
+	}
+
+	if (sec & BUF_SEC_EDIT)
+		ui_load_from(ui, ui->text.l2, b.file.buf, b.edit.start);
 }
 
 static inline void ui_draw_at(struct ui *ui, PangoLayout *l, int y) {
@@ -34,28 +43,24 @@ static inline void ui_draw_at(struct ui *ui, PangoLayout *l, int y) {
 
 static inline void ui_draw_text(struct ui *ui) {
 	const struct buffer b = ui->ved->buffer;
+	const int win_height_pango = ui->dim.h * PANGO_SCALE;
 
-	// TODO: only recalculate layouts if they're invalid (buffer has changed
-	//       or window has resized and we need more data)
 	// TODO: configurable tabstops
 	// TODO: alignment detection
 
+	int h1 = pango_layout_get_height(ui->text.l1);
+	ui_draw_at(ui, ui->text.l1, 0);
+	if (h1 > win_height_pango) return;
+
+	int h2 = 0;
 	if (b.edit.len) {
-		int h1, h2;
-		h1 = ui_load_from(ui, ui->text.l1, b.file.buf, b.edit.start);
-		ui_draw_at(ui, ui->text.l1, 0);
-		if (!h1) return;
-
-		h2 = ui_load_from(ui, ui->text.l2, b.edit.buf, b.edit.len);
+		h2 = pango_layout_get_height(ui->text.l2);
 		ui_draw_at(ui, ui->text.l2, h1);
-		if (!h2) return;
-
-		ui_load_from(ui, ui->text.l3, b.file.buf + b.edit.end, b.file.len - b.edit.end);
-		ui_draw_at(ui, ui->text.l3, h1 + h2);
-	} else {
-		ui_load_from(ui, ui->text.l1, b.file.buf, b.file.len);
-		ui_draw_at(ui, ui->text.l1, 0);
+		if (h1 + h2 > win_height_pango) return;
 	}
+
+	ui_draw_at(ui, ui->text.l3, h1 + h2);
+	ui_draw_at(ui, ui->text.l1, 0);
 }
 
 static void ui_render(struct ui *ui) {
@@ -70,6 +75,7 @@ static void ui_resize(struct ui *ui) {
 	pango_layout_set_width(ui->text.l1, w);
 	pango_layout_set_width(ui->text.l2, w);
 	pango_layout_set_width(ui->text.l3, w);
+	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
 }
 
 struct ui *ui_init(struct editor *ved) {
@@ -124,6 +130,11 @@ struct ui *ui_init(struct editor *ved) {
 	ui->ev.keypress = vev_create();
 	ui->ev.keyrelease = vev_create();
 	ui->ev.quit = vev_create();
+
+	// Buffer drawing
+	ui->ved->buffer.damage_cb = ui_damage_buffer;
+	ui->ved->buffer.damage_data = ui;
+	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
 
 	return ui;
 }

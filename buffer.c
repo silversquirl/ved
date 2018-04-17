@@ -29,6 +29,9 @@ int buf_init(struct buffer *b, char *filename) {
 	b->edit.buf = mmap(NULL, EDIT_ALLOC, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
 	if (b->edit.buf == MAP_FAILED) goto err2;
 
+	b->damage_cb = NULL;
+	b->damage_data = NULL;
+
 	return 0;
 
 err2:
