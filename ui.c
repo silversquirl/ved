@@ -47,19 +47,19 @@ static inline void ui_draw_text(struct ui *ui) {
 	// TODO: configurable tabstops
 	// TODO: alignment detection
 
-	int h1 = pango_layout_get_height(ui->text.l1);
+	int h1;
+	pango_layout_get_size(ui->text.l1, NULL, &h1);
 	ui_draw_at(ui, ui->text.l1, 0);
 	if (h1 > win_height_pango) return;
 
 	int h2 = 0;
 	if (b.edit.len) {
-		h2 = pango_layout_get_height(ui->text.l2);
+		pango_layout_get_size(ui->text.l2, NULL, &h2);
 		ui_draw_at(ui, ui->text.l2, h1);
 		if (h1 + h2 > win_height_pango) return;
 	}
 
 	ui_draw_at(ui, ui->text.l3, h1 + h2);
-	ui_draw_at(ui, ui->text.l1, 0);
 }
 
 static void ui_render(struct ui *ui) {
