@@ -30,7 +30,7 @@ struct ui {
 	} draw;
 
 	struct {
-		PangoLayout *l1, *l2, *l3;
+		PangoLayout *l;
 	} text;
 
 	// Called when the UI attempts to quit to check if it's allowed to.

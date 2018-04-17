@@ -6,61 +6,27 @@
 #define UI_TEXT_PADDING 5
 
 #define LAYOUT_TEXT_LEN_INIT 512
-static inline void ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, size_t len) {
-	const int win_height_pango = ui->dim.h * PANGO_SCALE;
-	int height;
-	size_t n = LAYOUT_TEXT_LEN_INIT;
-
-	do {
-		pango_layout_set_text(l, buf, n < len ? n : len);
-		if (n >= len) break;
-		pango_layout_get_size(l, NULL, &height);
-		n *= 2;
-	} while (height < win_height_pango);
-}
-
-static void ui_damage_buffer(unsigned int sec, void *uip) {
+static void ui_damage_buffer(void *uip) {
 	struct ui *ui = uip;
-	const struct buffer b = ui->ved->buffer;
+	struct buffer *buf = &ui->ved->buffer;
+	buf_view_init(buf, 0); // TODO: scrolling
 
-	if (sec & BUF_SEC_FILE) {
-		ui_load_from(ui, ui->text.l1, b.file.buf, b.edit.start);
-		ui_load_from(ui, ui->text.l3, b.file.buf + b.edit.start, b.file.len - b.edit.end);
-	}
-
-	if (sec & BUF_SEC_EDIT)
-		ui_load_from(ui, ui->text.l2, b.file.buf, b.edit.start);
+	int height;
+	do {
+		buf_view_extend(buf);
+		pango_layout_set_text(ui->text.l, buf->edit.buf, buf->edit.len);
+		pango_layout_get_pixel_size(ui->text.l, NULL, &height);
+	} while (height < ui->dim.h);
 }
 
 static inline void ui_set_colour(struct ui *ui, struct colour c) {
 	cairo_set_source_rgb(ui->draw.cr, c.r, c.g, c.b);
 }
 
-static inline void ui_draw_at(struct ui *ui, PangoLayout *l, int y) {
+static inline void ui_draw_at(struct ui *ui, int y) {
 	cairo_move_to(ui->draw.cr, 0, y);
 	ui_set_colour(ui, ui->colours.fg);
-	pango_cairo_show_layout(ui->draw.cr, l);
-}
-
-static inline void ui_draw_text(struct ui *ui) {
-	const struct buffer b = ui->ved->buffer;
-
-	// TODO: configurable tabstops
-	// TODO: alignment detection
-
-	int h1;
-	pango_layout_get_pixel_size(ui->text.l1, NULL, &h1);
-	ui_draw_at(ui, ui->text.l1, 0);
-	if (h1 > ui->dim.h) return;
-
-	int h2 = 0;
-	if (b.edit.len) {
-		pango_layout_get_pixel_size(ui->text.l2, NULL, &h2);
-		ui_draw_at(ui, ui->text.l2, h1);
-		if (h1 + h2 > ui->dim.h) return;
-	}
-
-	ui_draw_at(ui, ui->text.l3, h1 + h2);
+	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
 }
 
 static void ui_render(struct ui *ui) {
@@ -70,7 +36,10 @@ static void ui_render(struct ui *ui) {
 	ui_set_colour(ui, ui->colours.bg);
 	cairo_fill(ui->draw.cr);
 
-	ui_draw_text(ui);
+	// TODO: configurable tabstops
+	// TODO: alignment detection
+	// TODO: scrolling
+	ui_draw_at(ui, 0);
 
 	cairo_pop_group_to_source(ui->draw.cr);
 	cairo_paint(ui->draw.cr);
@@ -80,17 +49,12 @@ static void ui_render(struct ui *ui) {
 
 static void ui_resize(struct ui *ui) {
 	cairo_xlib_surface_set_size(ui->draw.surf, ui->dim.w, ui->dim.h);
-
-	pango_cairo_update_layout(ui->draw.cr, ui->text.l1);
-	pango_cairo_update_layout(ui->draw.cr, ui->text.l2);
-	pango_cairo_update_layout(ui->draw.cr, ui->text.l3);
+	pango_cairo_update_layout(ui->draw.cr, ui->text.l);
 
 	int w = PANGO_SCALE * (ui->dim.w - UI_TEXT_PADDING * 2);
-	pango_layout_set_width(ui->text.l1, w);
-	pango_layout_set_width(ui->text.l2, w);
-	pango_layout_set_width(ui->text.l3, w);
+	pango_layout_set_width(ui->text.l, w);
 
-	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
+	ui->ved->buffer.damage_cb(ui->ved->buffer.damage_data);
 }
 
 static void ui_keypress(struct ui *ui, XKeyEvent xk) {
@@ -139,32 +103,25 @@ struct ui *ui_init(struct editor *ved) {
 	cairo_translate(ui->draw.cr, UI_TEXT_PADDING, 0);
 
 	// Pango
-	ui->text.l1 = pango_cairo_create_layout(ui->draw.cr);
-	ui->text.l2 = pango_cairo_create_layout(ui->draw.cr);
-	ui->text.l3 = pango_cairo_create_layout(ui->draw.cr);
-
-	pango_layout_set_wrap(ui->text.l1, PANGO_WRAP_WORD_CHAR);
-	pango_layout_set_wrap(ui->text.l2, PANGO_WRAP_WORD_CHAR);
-	pango_layout_set_wrap(ui->text.l3, PANGO_WRAP_WORD_CHAR);
+	ui->text.l = pango_cairo_create_layout(ui->draw.cr);
+	pango_layout_set_wrap(ui->text.l, PANGO_WRAP_WORD_CHAR);
 
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
-	pango_layout_set_font_description(ui->text.l1, fdesc);
-	pango_layout_set_font_description(ui->text.l2, fdesc);
-	pango_layout_set_font_description(ui->text.l3, fdesc);
+	pango_layout_set_font_description(ui->text.l, fdesc);
 	pango_font_description_free(fdesc);
 
 	// Buffer drawing
 	ui->ved->buffer.damage_cb = ui_damage_buffer;
 	ui->ved->buffer.damage_data = ui;
-	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
+
+	// Force a size configuration
+	ui_resize(ui);
 
 	return ui;
 }
 
 void ui_free(struct ui *ui) {
-	g_object_unref(ui->text.l1);
-	g_object_unref(ui->text.l2);
-	g_object_unref(ui->text.l3);
+	g_object_unref(ui->text.l);
 
 	cairo_surface_finish(ui->draw.surf);
 	cairo_destroy(ui->draw.cr);
