@@ -9,6 +9,8 @@ struct commands;
 // Returns NULL on error. Check errno
 struct commands *cmd_create(void);
 
+void cmd_free(struct commands *cmds);
+
 // 'keys' may be permuted
 // Error codes:
 //  -1 UNIX error. Check errno

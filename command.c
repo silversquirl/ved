@@ -43,12 +43,25 @@ static struct command_node *cmd_node_create(void) {
 	return node;
 };
 
+static void cmd_node_free(struct command_node *node) {
+	if (!node->leaf)
+		for (size_t i = 0; i < node->n; ++i)
+			cmd_node_free(node->options[i].node);
+
+	free(node);
+}
+
 struct commands *cmd_create(void) {
 	struct command_node *node = cmd_node_create();
 	struct commands *c = malloc(sizeof *c);
 	c->root = node;
 	c->current = node;
 	return c;
+}
+
+void cmd_free(struct commands *cmds) {
+	cmd_node_free(cmds->root);
+	free(cmds);
 }
 
 static int cmd_add_option(struct command_node *node, struct command_matcher opt) {

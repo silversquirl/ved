@@ -1,5 +1,4 @@
 #include <errno.h>
-#include "ui.h"
 #include "ui_internal.h"
 
 #define UI_TEXT_BORDER 5
@@ -78,6 +77,14 @@ static void ui_resize(struct ui *ui) {
 	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
 }
 
+static void ui_keypress(struct ui *ui, XKeyEvent xk) {
+	cmd_handle_key(ui->ved->modes.current, ui, xk.keycode);
+}
+
+static void ui_keyrelease(struct ui *ui, XKeyEvent xk) {
+	// TODO: key releases
+}
+
 struct ui *ui_init(struct editor *ved) {
 	struct ui *ui = malloc(sizeof *ui);
 	if (!ui) return NULL;
@@ -110,6 +117,8 @@ struct ui *ui_init(struct editor *ved) {
 	ui->text.l1 = pango_layout_new(ctx);
 	ui->text.l2 = pango_layout_new(ctx);
 	ui->text.l3 = pango_layout_new(ctx);
+	g_object_unref(ctx);
+
 	pango_layout_set_wrap(ui->text.l1, PANGO_WRAP_WORD_CHAR);
 	pango_layout_set_wrap(ui->text.l2, PANGO_WRAP_WORD_CHAR);
 	pango_layout_set_wrap(ui->text.l3, PANGO_WRAP_WORD_CHAR);
@@ -126,17 +135,29 @@ struct ui *ui_init(struct editor *ved) {
 	ui->text.draw = XftDrawCreate(ui->dpy, ui->w, v, cmap);
 	ui_colour(ui, &ui->text.fg, "white");
 
-	// vev
-	ui->ev.keypress = vev_create();
-	ui->ev.keyrelease = vev_create();
-	ui->ev.quit = vev_create();
-
 	// Buffer drawing
 	ui->ved->buffer.damage_cb = ui_damage_buffer;
 	ui->ved->buffer.damage_data = ui;
 	ui->ved->buffer.damage_cb(BUF_SEC_ALL, ui->ved->buffer.damage_data);
 
 	return ui;
+}
+
+void ui_free(struct ui *ui) {
+	g_object_unref(ui->text.l1);
+	g_object_unref(ui->text.l2);
+	g_object_unref(ui->text.l3);
+	XDestroyWindow(ui->dpy, ui->w);
+	free(ui);
+}
+
+void ui_set_quit_cb(struct ui *ui, bool (*cb)(struct ui *)) {
+	ui->quit_cb = cb;
+}
+
+void ui_quit(struct ui *ui) {
+	if (!ui->quit_cb || ui->quit_cb(ui))
+		ui->exit = true;
 }
 
 void ui_mainloop(struct ui *ui) {
@@ -167,24 +188,17 @@ void ui_mainloop(struct ui *ui) {
 			}
 
 		case KeyPress:
-			vev_dispatch(ui->ev.keypress, &e.xkey);
+			ui_keypress(ui, e.xkey);
 			break;
 
 		case KeyRelease:
-			vev_dispatch(ui->ev.keyrelease, &e.xkey);
+			ui_keyrelease(ui, e.xkey);
 			break;
 
 		case ClientMessage:
-			if (e.xclient.data.l[0] == ui->atoms.wm_delete_window) {
-				ui->exit = true;
-				vev_dispatch(ui->ev.quit, &e.xclient);
-			}
+			if (e.xclient.data.l[0] == ui->atoms.wm_delete_window)
+				ui_quit(ui);
 			break;
 		}
 	}
-	XDestroyWindow(ui->dpy, ui->w);
-}
-
-void ui_quit(struct ui *ui) {
-	ui->exit = true;
 }

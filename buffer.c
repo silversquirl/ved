@@ -5,7 +5,6 @@
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include "buffer.h"
-#include "vev.h"
 
 #define EDIT_ALLOC 4 * (1<<10) // 4KiB
 

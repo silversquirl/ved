@@ -4,6 +4,7 @@
 
 #include <pango/pangoxft.h>
 #include <X11/Xlib.h>
+#include "ui.h"
 
 struct ui {
 	struct editor *ved;
@@ -23,9 +24,7 @@ struct ui {
 		PangoLayout *l1, *l2, *l3;
 	} text;
 
-	struct {
-		struct event *keypress;
-		struct event *keyrelease;
-		struct event *quit;
-	} ev;
+	// Called when the UI attempts to quit to check if it's allowed to.
+	// true means "yes, quit now", false means "no, don't quit yet"
+	bool (*quit_cb)(struct ui *ui);
 };

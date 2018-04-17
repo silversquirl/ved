@@ -43,3 +43,9 @@ int editor_init(struct editor *ved, char *filename) {
 	ved->modes.current = ved->modes.command;
 	return 0;
 }
+
+void editor_destroy(struct editor ved) {
+	buf_free(ved.buffer);
+	cmd_free(ved.modes.command);
+	cmd_free(ved.modes.edit);
+}

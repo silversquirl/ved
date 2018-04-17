@@ -1,12 +1,5 @@
 #include "editor.h"
 #include "ui.h"
-#include "ui_internal.h"
-
-void handle_keypress(void *xkp, void *uip) {
-	XKeyEvent *xk = xkp;
-	struct ui *ui = uip;
-	cmd_handle_key(ui->ved->modes.current, ui, xk->keycode);
-}
 
 int main() {
 	struct editor ved;
@@ -29,10 +22,8 @@ int main() {
 		return 1;
 	}
 
-	if (vev_register(ui->ev.keypress, handle_keypress, ui)) {
-		perror("vev_register");
-		return 1;
-	}
-
 	ui_mainloop(ui);
+
+	ui_free(ui);
+	editor_destroy(ved);
 }

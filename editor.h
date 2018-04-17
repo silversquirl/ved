@@ -12,5 +12,6 @@ struct editor {
 };
 
 int editor_init(struct editor *ved, char *filename);
+void editor_destroy(struct editor ved);
 
 #endif
