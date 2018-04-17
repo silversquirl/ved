@@ -12,15 +12,15 @@ static int ui_colour(struct ui *ui, XftColor *c, const char *name) {
 
 #define LAYOUT_TEXT_LEN_INIT 512
 // Returns -1 if the window is full, the height of the pango layout otherwise
-static inline int ui_load_from(struct ui *ui, const char *buf, size_t len) {
+static inline int ui_load_from(struct ui *ui, PangoLayout *l, const char *buf, size_t len) {
 	const int win_height_pango = ui->dim.h * PANGO_SCALE;
 	int height;
 	size_t n = LAYOUT_TEXT_LEN_INIT;
 
 	do {
-		pango_layout_set_text(ui->text.layout, buf, n < len ? n : len);
+		pango_layout_set_text(l, buf, n < len ? n : len);
 		if (n >= len) break;
-		pango_layout_get_size(ui->text.layout, NULL, &height);
+		pango_layout_get_size(l, NULL, &height);
 		n *= 2;
 	} while (height < win_height_pango);
 
@@ -28,8 +28,8 @@ static inline int ui_load_from(struct ui *ui, const char *buf, size_t len) {
 	else return 0;
 }
 
-static inline void ui_draw_at(struct ui *ui, int y) {
-	pango_xft_render_layout(ui->text.draw, &ui->text.fg, ui->text.layout, UI_TEXT_BORDER * PANGO_SCALE, y);
+static inline void ui_draw_at(struct ui *ui, PangoLayout *l, int y) {
+	pango_xft_render_layout(ui->text.draw, &ui->text.fg, l, UI_TEXT_BORDER * PANGO_SCALE, y);
 }
 
 static inline void ui_draw_text(struct ui *ui) {
@@ -41,19 +41,20 @@ static inline void ui_draw_text(struct ui *ui) {
 	// TODO: alignment detection
 
 	if (b.edit.len) {
-		// TODO: switch to multiple layouts
 		int h1, h2;
-		h1 = ui_load_from(ui, b.file.buf, b.edit.start);
-		ui_draw_at(ui, 0);
-		if (h1 < 0) return;
-		h2 = ui_load_from(ui, b.edit.buf, b.edit.len);
-		ui_draw_at(ui, h1);
-		if (h2 < 0) return;
-		ui_load_from(ui, b.file.buf + b.edit.end, b.file.len - b.edit.end);
-		ui_draw_at(ui, h1 + h2);
+		h1 = ui_load_from(ui, ui->text.l1, b.file.buf, b.edit.start);
+		ui_draw_at(ui, ui->text.l1, 0);
+		if (!h1) return;
+
+		h2 = ui_load_from(ui, ui->text.l2, b.edit.buf, b.edit.len);
+		ui_draw_at(ui, ui->text.l2, h1);
+		if (!h2) return;
+
+		ui_load_from(ui, ui->text.l3, b.file.buf + b.edit.end, b.file.len - b.edit.end);
+		ui_draw_at(ui, ui->text.l3, h1 + h2);
 	} else {
-		ui_load_from(ui, b.file.buf, b.file.len);
-		ui_draw_at(ui, 0);
+		ui_load_from(ui, ui->text.l1, b.file.buf, b.file.len);
+		ui_draw_at(ui, ui->text.l1, 0);
 	}
 }
 
@@ -65,7 +66,10 @@ static void ui_render(struct ui *ui) {
 }
 
 static void ui_resize(struct ui *ui) {
-	pango_layout_set_width(ui->text.layout, ui->dim.w * PANGO_SCALE - UI_TEXT_BORDER * PANGO_SCALE * 2);
+	int w = ui->dim.w * PANGO_SCALE - UI_TEXT_BORDER * PANGO_SCALE * 2;
+	pango_layout_set_width(ui->text.l1, w);
+	pango_layout_set_width(ui->text.l2, w);
+	pango_layout_set_width(ui->text.l3, w);
 }
 
 struct ui *ui_init(struct editor *ved) {
@@ -97,11 +101,17 @@ struct ui *ui_init(struct editor *ved) {
 	// Pango
 	PangoFontMap *fm  = pango_xft_get_font_map(ui->dpy, scr);
 	PangoContext *ctx = pango_font_map_create_context(fm);
-	ui->text.layout  = pango_layout_new(ctx);
-	pango_layout_set_wrap(ui->text.layout, PANGO_WRAP_WORD_CHAR);
+	ui->text.l1 = pango_layout_new(ctx);
+	ui->text.l2 = pango_layout_new(ctx);
+	ui->text.l3 = pango_layout_new(ctx);
+	pango_layout_set_wrap(ui->text.l1, PANGO_WRAP_WORD_CHAR);
+	pango_layout_set_wrap(ui->text.l2, PANGO_WRAP_WORD_CHAR);
+	pango_layout_set_wrap(ui->text.l3, PANGO_WRAP_WORD_CHAR);
 
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
-	pango_layout_set_font_description(ui->text.layout, fdesc);
+	pango_layout_set_font_description(ui->text.l1, fdesc);
+	pango_layout_set_font_description(ui->text.l2, fdesc);
+	pango_layout_set_font_description(ui->text.l3, fdesc);
 	pango_font_description_free(fdesc);
 
 	// Xft

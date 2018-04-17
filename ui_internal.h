@@ -20,7 +20,7 @@ struct ui {
 	struct {
 		XftDraw *draw;
 		XftColor fg;
-		PangoLayout *layout;
+		PangoLayout *l1, *l2, *l3;
 	} text;
 
 	struct {
