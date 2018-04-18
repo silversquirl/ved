@@ -71,10 +71,18 @@ static void ui_render(struct ui *ui) {
 
 	cairo_translate(ui->draw.cr, 0, ui->text.scroll);
 
-	cairo_move_to(ui->draw.cr, UI_TEXT_PADDING, 0);
-	cairo_line_to(ui->draw.cr, ui->dim.w - UI_TEXT_PADDING * 2, 0);
-	ui_set_colour(ui, ui->colours.fg);
+	// Draw lines above and below the text
+	ui_set_colour(ui, ui->colours.esof);
 	cairo_set_line_width(ui->draw.cr, 1);
+	const double sx = UI_TEXT_PADDING, ex = ui->dim.w - UI_TEXT_PADDING * 2;
+
+	cairo_move_to(ui->draw.cr, sx, 0);
+	cairo_line_to(ui->draw.cr, ex, 0);
+	cairo_stroke(ui->draw.cr);
+
+	const double y = ui_text_height(ui);
+	cairo_move_to(ui->draw.cr, sx, y);
+	cairo_line_to(ui->draw.cr, ex, y);
 	cairo_stroke(ui->draw.cr);
 
 	// TODO: configurable indentation
@@ -90,7 +98,7 @@ static void ui_render(struct ui *ui) {
 }
 
 static void ui_scroll(struct ui *ui, double delta) {
-	ui->text.scroll += delta * ui->text.scroll_factor;
+	ui->text.scroll += delta * ui->text.line_height * 1.5;
 
 	double scroll_max = ui->dim.h / 2.;
 	if (ui->text.scroll > scroll_max)
@@ -272,8 +280,9 @@ struct ui *ui_init(struct editor *ved) {
 	}
 
 	// Colours
-	ui->colours.fg = (struct colour){ 1, 1, 1 };
-	ui->colours.bg = (struct colour){ 0, 0, 0 };
+	ui->colours.fg	= (struct colour){ 1, 1, 1 };
+	ui->colours.bg	= (struct colour){ 0, 0, 0 };
+	ui->colours.esof	= (struct colour){ .5, .5, .5 };
 
 	// Cairo
 	XWindowAttributes wattr;
@@ -296,7 +305,7 @@ struct ui *ui_init(struct editor *ved) {
 	PangoFontMetrics *fmetrics = pango_font_get_metrics(font, NULL);
 	int asc = pango_font_metrics_get_ascent(fmetrics);
 	int desc = pango_font_metrics_get_descent(fmetrics);
-	ui->text.scroll_factor = (asc + desc) / (double)PANGO_SCALE * 1.5;
+	ui->text.line_height = (asc + desc) / (double)PANGO_SCALE;
 	pango_font_metrics_unref(fmetrics);
 
 	pango_font_description_free(fdesc);

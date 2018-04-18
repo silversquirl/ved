@@ -34,7 +34,10 @@ struct ui {
 	} input;
 
 	struct {
-		struct colour fg, bg;
+		struct colour
+			fg,	// Text foreground
+			bg,	// Window background
+			esof;	// End/start of file line foreground
 	} colours;
 
 	struct {
@@ -44,7 +47,7 @@ struct ui {
 
 	struct {
 		PangoLayout *l;
-		double scroll, scroll_factor;
+		double scroll, line_height;
 	} text;
 
 	// Called when the UI attempts to quit to check if it's allowed to.
