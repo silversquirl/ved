@@ -4,6 +4,8 @@
 #include <stddef.h>
 #include <stdio.h>
 
+#define EDIT_ALLOC_STEP (1<<10) // 1KiB
+
 struct buffer {
 	struct {
 		int fd;
@@ -12,7 +14,8 @@ struct buffer {
 	} file;
 
 	struct {
-		size_t start, end, len, alloc;
+		// Always starts at 0 (the beginning of the file)
+		size_t end, len, alloc;
 		char *buf;
 	} edit;
 
@@ -24,8 +27,8 @@ struct buffer {
 int buf_init(struct buffer *b, char *filename);
 void buf_free(struct buffer b);
 void buf_sync(struct buffer b);
-void buf_view_init(struct buffer *b, size_t start);
 int buf_view_extend(struct buffer *b);
+int buf_view_shrink(struct buffer *b, size_t decrement);
 // TODO: editing functions. Make sure they call `damage_cb`!
 
 #endif

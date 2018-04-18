@@ -1,3 +1,4 @@
+#include <stdbool.h>
 #include <stdlib.h>
 #include <errno.h>
 #include <cairo-xlib.h>
@@ -6,18 +7,54 @@
 
 #define UI_TEXT_PADDING 5
 
-#define LAYOUT_TEXT_LEN_INIT 512
+static inline int ui_text_height(struct ui *ui) {
+	int height;
+	pango_layout_get_pixel_size(ui->text.l, NULL, &height);
+	return height;
+}
+
+static inline bool ui_view_at_eof(struct ui *ui) {
+	return ui->ved->buffer.file.len == ui->ved->buffer.edit.end;
+}
+
 static void ui_damage_buffer(void *uip) {
 	struct ui *ui = uip;
 	struct buffer *buf = &ui->ved->buffer;
-	buf_view_init(buf, 0); // TODO: scrolling
+	bool eof = false;
 
-	int height;
+	const int target = ui->dim.h - ui->text.scroll + 1;
 	do {
-		buf_view_extend(buf);
+		switch (buf_view_extend(buf)) {
+		case 0: // Success
+			break;
+		case -1: // Error
+			perror("view_extend");
+			break;
+		case 1: // EOF reached
+			eof = true;
+			break;
+		}
 		pango_layout_set_text(ui->text.l, buf->edit.buf, buf->edit.len);
-		pango_layout_get_pixel_size(ui->text.l, NULL, &height);
-	} while (height < ui->dim.h);
+	} while (!eof && ui_text_height(ui) < target);
+}
+
+static bool ui_shrink_buffer(struct ui *ui) {
+	struct buffer *buf = &ui->ved->buffer;
+
+	const int target = ui->dim.h - ui->text.scroll + 1;
+	size_t decrement = 0;
+	while (ui_text_height(ui) > target) {
+		decrement += EDIT_ALLOC_STEP;
+		pango_layout_set_text(ui->text.l, buf->edit.buf, buf->edit.len - decrement);
+	}
+
+	if (!decrement)
+		return false;
+
+	if (buf_view_shrink(buf, decrement - EDIT_ALLOC_STEP) == -1)
+		perror("view_shrink");
+
+	return true;
 }
 
 static inline void ui_set_colour(struct ui *ui, struct colour c) {
@@ -54,6 +91,20 @@ static void ui_render(struct ui *ui) {
 
 static void ui_scroll(struct ui *ui, double delta) {
 	ui->text.scroll += delta * ui->text.scroll_factor;
+
+	double scroll_max = ui->dim.h / 2.;
+	if (ui->text.scroll > scroll_max)
+		ui->text.scroll = scroll_max;
+
+	if (ui_view_at_eof(ui)) {
+		double scroll_min = scroll_max - ui_text_height(ui);
+		if (ui->text.scroll < scroll_min)
+			ui->text.scroll = scroll_min;
+	}
+
+	if (ui_text_height(ui) > ui->dim.h - ui->text.scroll + 1)
+		ui_shrink_buffer(ui);
+	ui_damage_buffer(ui);
 	ui_render(ui);
 }
 
