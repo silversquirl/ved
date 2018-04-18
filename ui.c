@@ -47,6 +47,11 @@ static void ui_render(struct ui *ui) {
 	XFlush(ui->dpy);
 }
 
+static void ui_scroll(struct ui *ui, double delta) {
+	ui->text.scroll += delta * ui->text.scroll_factor;
+	ui_render(ui);
+}
+
 static void ui_resize(struct ui *ui) {
 	cairo_xlib_surface_set_size(ui->draw.surf, ui->dim.w, ui->dim.h);
 	pango_cairo_update_layout(ui->draw.cr, ui->text.l);
@@ -65,6 +70,27 @@ static void ui_keyrelease(struct ui *ui, XKeyEvent xk) {
 	// TODO: key releases
 }
 
+static void ui_buttonpress(struct ui *ui, XButtonEvent xb) {
+	switch (xb.button) {
+	case 4:
+		if (!ui->input.use_xi2)
+			ui_scroll(ui, +1);
+		break;
+	case 5:
+		if (!ui->input.use_xi2)
+			ui_scroll(ui, -1);
+		break;
+	case 6:
+	case 7:
+		// TODO: consider supporting horizontal scrolling
+		break;
+
+	default:
+		printf("Button %d\n", xb.button);
+		break;
+	}
+}
+
 static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
 	XIDeviceChangedEvent *dc;
 	XIDeviceEvent *de;
@@ -74,7 +100,7 @@ static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
 	case XI_DeviceChanged:
 		dc = xc.data;
 		if (dc->reason == XIDeviceChange)
-			puts("Device changed");
+			puts("Device changed"); // TODO: Update in response to changes in scroll increment
 		break;
 
 	case XI_Motion:
@@ -89,9 +115,7 @@ static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
 							ui->input.scroll_v.reset = false;
 						} else {
 							double delta = ui->input.scroll_v.val - val;
-							// TODO: scale based on line height and ui->input.scroll_v.increment
-							ui->text.scroll += delta;
-							ui_render(ui);
+							ui_scroll(ui, delta / ui->input.scroll_v.increment);
 						}
 						ui->input.scroll_v.val = val;
 					}
@@ -129,6 +153,7 @@ struct ui *ui_init(struct editor *ved) {
 	events |= ExposureMask; // Tells us when to redraw
 	events |= KeyPressMask | KeyReleaseMask; // Keyboard events
 	events |= KeymapStateMask; // Keyboard state on window entry
+	events |= ButtonPressMask | ButtonReleaseMask; // Button events
 	XSelectInput(ui->dpy, ui->w, events);
 	ui->exit = false;
 
@@ -144,7 +169,6 @@ struct ui *ui_init(struct editor *ved) {
 			|| XIQueryVersion(ui->dpy, &xi_maj, &xi_min) == BadRequest) {
 		fprintf(stderr, "Error initialising XInput2. Falling back to legacy mouse button scrolling.\n");
 		ui->input.use_xi2 = false;
-		// TODO: actually fall back to lecacy scrolling
 	} else {
 		int xi_ndev;
 		XIDeviceInfo *xi_info = XIQueryDevice(ui->dpy, XIAllMasterDevices, &xi_ndev);
@@ -192,6 +216,17 @@ struct ui *ui_init(struct editor *ved) {
 
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
 	pango_layout_set_font_description(ui->text.l, fdesc);
+
+	PangoFont *font = pango_font_map_load_font(
+		pango_cairo_font_map_get_default(),
+		pango_layout_get_context(ui->text.l),
+		fdesc);
+	PangoFontMetrics *fmetrics = pango_font_get_metrics(font, NULL);
+	int asc = pango_font_metrics_get_ascent(fmetrics);
+	int desc = pango_font_metrics_get_descent(fmetrics);
+	ui->text.scroll_factor = (asc + desc) / (double)PANGO_SCALE * 1.5;
+	pango_font_metrics_unref(fmetrics);
+
 	pango_font_description_free(fdesc);
 
 	// Buffer drawing
@@ -257,6 +292,10 @@ void ui_mainloop(struct ui *ui) {
 
 		case KeyRelease:
 			ui_keyrelease(ui, e.xkey);
+			break;
+
+		case ButtonPress:
+			ui_buttonpress(ui, e.xbutton);
 			break;
 
 		case GenericEvent:

@@ -44,7 +44,7 @@ struct ui {
 
 	struct {
 		PangoLayout *l;
-		double scroll;
+		double scroll, scroll_factor;
 	} text;
 
 	// Called when the UI attempts to quit to check if it's allowed to.
