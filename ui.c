@@ -24,22 +24,27 @@ static inline void ui_set_colour(struct ui *ui, struct colour c) {
 	cairo_set_source_rgb(ui->draw.cr, c.r, c.g, c.b);
 }
 
-static inline void ui_draw_at(struct ui *ui, double y) {
-	cairo_move_to(ui->draw.cr, 0, y);
-	ui_set_colour(ui, ui->colours.fg);
-	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
-}
-
 static void ui_render(struct ui *ui) {
 	cairo_push_group(ui->draw.cr);
 
-	cairo_rectangle(ui->draw.cr, -UI_TEXT_PADDING, 0, ui->dim.w, ui->dim.h);
+	cairo_translate(ui->draw.cr, 0, 0);
+	cairo_rectangle(ui->draw.cr, 0, 0, ui->dim.w, ui->dim.h);
 	ui_set_colour(ui, ui->colours.bg);
 	cairo_fill(ui->draw.cr);
 
+	cairo_translate(ui->draw.cr, 0, ui->text.scroll);
+
+	cairo_move_to(ui->draw.cr, UI_TEXT_PADDING, 0);
+	cairo_line_to(ui->draw.cr, ui->dim.w - UI_TEXT_PADDING * 2, 0);
+	ui_set_colour(ui, ui->colours.fg);
+	cairo_set_line_width(ui->draw.cr, 1);
+	cairo_stroke(ui->draw.cr);
+
 	// TODO: configurable tabstops
 	// TODO: alignment detection
-	ui_draw_at(ui, ui->text.scroll);
+	cairo_move_to(ui->draw.cr, UI_TEXT_PADDING, 0);
+	ui_set_colour(ui, ui->colours.fg);
+	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
 
 	cairo_pop_group_to_source(ui->draw.cr);
 	cairo_paint(ui->draw.cr);
@@ -224,7 +229,7 @@ struct ui *ui_init(struct editor *ved) {
 	XGetWindowAttributes(ui->dpy, ui->w, &wattr);
 	ui->draw.surf = cairo_xlib_surface_create(ui->dpy, ui->w, wattr.visual, ui->dim.w, ui->dim.h);
 	ui->draw.cr = cairo_create(ui->draw.surf);
-	cairo_translate(ui->draw.cr, UI_TEXT_PADDING, 0);
+	cairo_translate(ui->draw.cr, 0, 0);
 
 	// Pango
 	ui->text.l = pango_cairo_create_layout(ui->draw.cr);
