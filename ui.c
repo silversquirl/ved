@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <cairo-xlib.h>
+#include <X11/extensions/XInput2.h>
 #include "ui_internal.h"
 
 #define UI_TEXT_PADDING 5
@@ -23,7 +24,7 @@ static inline void ui_set_colour(struct ui *ui, struct colour c) {
 	cairo_set_source_rgb(ui->draw.cr, c.r, c.g, c.b);
 }
 
-static inline void ui_draw_at(struct ui *ui, int y) {
+static inline void ui_draw_at(struct ui *ui, double y) {
 	cairo_move_to(ui->draw.cr, 0, y);
 	ui_set_colour(ui, ui->colours.fg);
 	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
@@ -38,8 +39,7 @@ static void ui_render(struct ui *ui) {
 
 	// TODO: configurable tabstops
 	// TODO: alignment detection
-	// TODO: scrolling
-	ui_draw_at(ui, 0);
+	ui_draw_at(ui, ui->text.scroll);
 
 	cairo_pop_group_to_source(ui->draw.cr);
 	cairo_paint(ui->draw.cr);
@@ -63,6 +63,50 @@ static void ui_keypress(struct ui *ui, XKeyEvent xk) {
 
 static void ui_keyrelease(struct ui *ui, XKeyEvent xk) {
 	// TODO: key releases
+}
+
+static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
+	XIDeviceChangedEvent *dc;
+	XIDeviceEvent *de;
+	XIEnterEvent *ee;
+
+	switch (xc.evtype) {
+	case XI_DeviceChanged:
+		dc = xc.data;
+		if (dc->reason == XIDeviceChange)
+			puts("Device changed");
+		break;
+
+	case XI_Motion:
+		de = xc.data;
+		for (int b = 0, i = 0; b < de->valuators.mask_len; ++b) {
+			for (int n = 0; de->valuators.mask[b] >> n; ++n) {
+				if ((de->valuators.mask[b] >> n) & 1) {
+					int bit = b * CHAR_BIT + n;
+					if (bit == ui->input.scroll_v.valuator) {
+						double val = de->valuators.values[i];
+						if (ui->input.scroll_v.reset) {
+							ui->input.scroll_v.reset = false;
+						} else {
+							double delta = ui->input.scroll_v.val - val;
+							// TODO: scale based on line height and ui->input.scroll_v.increment
+							ui->text.scroll += delta;
+							ui_render(ui);
+						}
+						ui->input.scroll_v.val = val;
+					}
+					++i;
+				}
+			}
+		}
+		break;
+
+	case XI_Enter:
+		ee = xc.data;
+		if (ee->evtype == XI_Enter && ee->mode == XINotifyNormal)
+			ui->input.scroll_v.reset = true;
+		break;
+	}
 }
 
 struct ui *ui_init(struct editor *ved) {
@@ -90,6 +134,46 @@ struct ui *ui_init(struct editor *ved) {
 
 	ui->atoms.wm_delete_window = XInternAtom(ui->dpy, "WM_DELETE_WINDOW", false);
 	XSetWMProtocols(ui->dpy, ui->w, &ui->atoms.wm_delete_window, 1);
+
+	// Scrolling
+	ui->input.scroll_v.reset = true;
+	ui->text.scroll = 0.0;
+
+	int event, error, xi_maj = 2, xi_min = 1;
+	if (!XQueryExtension(ui->dpy, "XInputExtension", &ui->input.opcode, &event, &error)
+			|| XIQueryVersion(ui->dpy, &xi_maj, &xi_min) == BadRequest) {
+		fprintf(stderr, "Error initialising XInput2. Falling back to legacy mouse button scrolling.\n");
+		ui->input.use_xi2 = false;
+		// TODO: actually fall back to lecacy scrolling
+	} else {
+		int xi_ndev;
+		XIDeviceInfo *xi_info = XIQueryDevice(ui->dpy, XIAllMasterDevices, &xi_ndev);
+		for (int i = 0; i < xi_ndev; ++i) {
+			for (int j = 0; j < xi_info[i].num_classes; ++j) {
+				XIScrollClassInfo *scroll = (XIScrollClassInfo *)xi_info[i].classes[j];
+				if (scroll->type != XIScrollClass) continue;
+				// TODO: consider supporting horizontal scrolling
+				if (scroll->scroll_type != XIScrollTypeVertical) continue;
+
+				ui->input.device = xi_info[i].deviceid;
+				ui->input.scroll_v.valuator = scroll->number;
+				ui->input.scroll_v.increment = scroll->increment;
+				break;
+			}
+		}
+
+		XIEventMask xi_emask = {
+			.deviceid = ui->input.device,
+			.mask_len = 1,
+			.mask = (unsigned char [1]){ 0 },
+		};
+		XISetMask(xi_emask.mask, XI_DeviceChanged);
+		XISetMask(xi_emask.mask, XI_Motion);
+		XISetMask(xi_emask.mask, XI_Enter);
+		XISelectEvents(ui->dpy, ui->w, &xi_emask, 1);
+
+		ui->input.use_xi2 = true;
+	}
 
 	// Colours
 	ui->colours.fg = (struct colour){ 1, 1, 1 };
@@ -173,6 +257,13 @@ void ui_mainloop(struct ui *ui) {
 
 		case KeyRelease:
 			ui_keyrelease(ui, e.xkey);
+			break;
+
+		case GenericEvent:
+			if (e.xgeneric.extension == ui->input.opcode && XGetEventData(ui->dpy, &e.xcookie)) {
+				ui_xinput(ui, e.xcookie);
+				XFreeEventData(ui->dpy, &e.xcookie);
+			}
 			break;
 
 		case ClientMessage:

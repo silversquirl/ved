@@ -21,6 +21,19 @@ struct ui {
 	} atoms;
 
 	struct {
+		bool use_xi2;
+		int opcode, device;
+
+		struct {
+			int valuator;
+			double increment;
+
+			bool reset;
+			double val;
+		} scroll_v;
+	} input;
+
+	struct {
 		struct colour fg, bg;
 	} colours;
 
@@ -31,6 +44,7 @@ struct ui {
 
 	struct {
 		PangoLayout *l;
+		double scroll;
 	} text;
 
 	// Called when the UI attempts to quit to check if it's allowed to.

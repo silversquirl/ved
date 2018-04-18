@@ -1,8 +1,8 @@
 .POSIX:
 .PHONY: all clean
 
-CFLAGS := -D_POSIX_C_SOURCE=200809L -Wall -Werror $(shell pkg-config --cflags pangocairo x11) $(DEBUG)
-LDFLAGS := $(shell pkg-config --libs pangocairo x11)
+CFLAGS := -D_POSIX_C_SOURCE=200809L -Wall -Werror $(shell pkg-config --cflags pangocairo x11 xi) $(DEBUG)
+LDFLAGS := $(shell pkg-config --libs pangocairo x11 xi)
 
 SOURCE := $(wildcard *.c)
 OBJECT := $(patsubst %.c,%.o,$(SOURCE))
