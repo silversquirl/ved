@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include "editor.h"
 #include "ui.h"
 

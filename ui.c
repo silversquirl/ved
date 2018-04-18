@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <cairo-xlib.h>
+#include <X11/Xutil.h>
 #include <X11/extensions/XInput2.h>
 #include "ui_internal.h"
 
@@ -58,7 +59,7 @@ static bool ui_shrink_buffer(struct ui *ui) {
 }
 
 static inline void ui_set_colour(struct ui *ui, struct colour c) {
-	cairo_set_source_rgb(ui->draw.cr, c.r, c.g, c.b);
+	cairo_set_source_rgba(ui->draw.cr, c.r, c.g, c.b, c.a);
 }
 
 static void ui_render(struct ui *ui) {
@@ -92,6 +93,7 @@ static void ui_render(struct ui *ui) {
 	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
 
 	cairo_pop_group_to_source(ui->draw.cr);
+	XClearWindow(ui->dpy, ui->w);
 	cairo_paint(ui->draw.cr);
 	cairo_surface_flush(ui->draw.surf);
 	XFlush(ui->dpy);
@@ -224,12 +226,30 @@ struct ui *ui_init(struct editor *ved) {
 	// X11
 	ui->dpy = XOpenDisplay(NULL);
 	if (!ui->dpy) {
+		fprintf(stderr, "Could not open display\n");
 		free(ui);
 		return NULL;
 	}
 	int scr = DefaultScreen(ui->dpy);
-	int black = BlackPixel(ui->dpy, scr);
-	ui->w = XCreateSimpleWindow(ui->dpy, DefaultRootWindow(ui->dpy), 0, 0, 600, 400, 0, black, black);
+
+	XVisualInfo visinfo;
+	if (!XMatchVisualInfo(ui->dpy, scr, 32, TrueColor, &visinfo)) {
+		fprintf(stderr, "Could not find suitable visual\n");
+		free(ui);
+		return NULL;
+	}
+
+	XSetWindowAttributes wattr = {
+		.colormap = XCreateColormap(ui->dpy, DefaultRootWindow(ui->dpy), visinfo.visual, AllocNone),
+		.background_pixel = BlackPixel(ui->dpy, scr),
+		.border_pixel = BlackPixel(ui->dpy, scr),
+	};
+	ui->w = XCreateWindow(
+		ui->dpy,
+		DefaultRootWindow(ui->dpy),
+		0, 0, 800, 600, 0,
+		visinfo.depth, InputOutput, visinfo.visual,
+		CWColormap | CWBackPixel | CWBorderPixel, &wattr);
 
 	long events = 0;
 	events |= StructureNotifyMask; // Tells us when the window resizes
@@ -280,14 +300,12 @@ struct ui *ui_init(struct editor *ved) {
 	}
 
 	// Colours
-	ui->colours.fg	= (struct colour){ 1, 1, 1 };
-	ui->colours.bg	= (struct colour){ 0, 0, 0 };
-	ui->colours.esof	= (struct colour){ .5, .5, .5 };
+	ui->colours.fg	= (struct colour){ 1, 1, 1, 1 };
+	ui->colours.bg	= (struct colour){ 0, 0, 0, .6 };
+	ui->colours.esof	= (struct colour){ .5, .5, .5, 1 };
 
 	// Cairo
-	XWindowAttributes wattr;
-	XGetWindowAttributes(ui->dpy, ui->w, &wattr);
-	ui->draw.surf = cairo_xlib_surface_create(ui->dpy, ui->w, wattr.visual, ui->dim.w, ui->dim.h);
+	ui->draw.surf = cairo_xlib_surface_create(ui->dpy, ui->w, visinfo.visual, ui->dim.w, ui->dim.h);
 	ui->draw.cr = cairo_create(ui->draw.surf);
 	cairo_translate(ui->draw.cr, 0, 0);
 

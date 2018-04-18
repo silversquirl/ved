@@ -66,7 +66,6 @@ int buf_view_extend(struct buffer *b) {
 
 	if (b->edit.len + n > b->edit.alloc) {
 		size_t new_alloc = b->edit.len + EDIT_ALLOC_STEP;
-		printf("realloc: %lu -> %lu\n", b->edit.alloc, new_alloc);
 		char *tmp = realloc(b->edit.buf, new_alloc);
 		if (!tmp) return -1;
 		b->edit.buf = tmp;

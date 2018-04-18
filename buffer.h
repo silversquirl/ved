@@ -2,7 +2,6 @@
 #define __VED_BUFFER_H__
 
 #include <stddef.h>
-#include <stdio.h>
 
 #define EDIT_ALLOC_STEP (1<<10) // 1KiB
 

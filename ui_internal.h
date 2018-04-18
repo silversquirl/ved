@@ -6,7 +6,7 @@
 #include <X11/Xlib.h>
 #include "ui.h"
 
-struct colour { double r, g, b; };
+struct colour { double r, g, b, a; };
 
 struct ui {
 	struct editor *ved;
