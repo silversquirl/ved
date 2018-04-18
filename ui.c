@@ -40,8 +40,8 @@ static void ui_render(struct ui *ui) {
 	cairo_set_line_width(ui->draw.cr, 1);
 	cairo_stroke(ui->draw.cr);
 
-	// TODO: configurable tabstops
-	// TODO: alignment detection
+	// TODO: configurable indentation
+	// TODO: elastic tabstops (see http://nickgravgaard.com/elastic-tabstops/)
 	cairo_move_to(ui->draw.cr, UI_TEXT_PADDING, 0);
 	ui_set_colour(ui, ui->colours.fg);
 	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
