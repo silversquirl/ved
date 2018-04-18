@@ -62,6 +62,25 @@ static void ui_resize(struct ui *ui) {
 	ui->ved->buffer.damage_cb(ui->ved->buffer.damage_data);
 }
 
+// True means scroll valuator was found, false means not
+static bool ui_update_xi2_scroll(struct ui *ui, XIAnyClassInfo **classes, int nclass) {
+	for (int i = 0; i < nclass; ++i) {
+		XIScrollClassInfo *scroll = (XIScrollClassInfo *)classes[i];
+		if (scroll->type != XIScrollClass) continue;
+		// TODO: consider supporting horizontal scrolling
+		if (scroll->scroll_type != XIScrollTypeVertical) continue;
+
+		ui->input.scroll_v.valuator = scroll->number;
+		ui->input.scroll_v.increment = scroll->increment;
+
+		// Change of valuators means we need to reset the scroll value
+		ui->input.scroll_v.reset = true;
+
+		return true;
+	}
+	return false;
+}
+
 static void ui_keypress(struct ui *ui, XKeyEvent xk) {
 	cmd_handle_key(ui->ved->modes.current, ui, xk.keycode);
 }
@@ -99,8 +118,8 @@ static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
 	switch (xc.evtype) {
 	case XI_DeviceChanged:
 		dc = xc.data;
-		if (dc->reason == XIDeviceChange)
-			puts("Device changed"); // TODO: Update in response to changes in scroll increment
+		// Ignore return because we don't care if it's not a scroll valuator change
+		ui_update_xi2_scroll(ui, dc->classes, dc->num_classes);
 		break;
 
 	case XI_Motion:
@@ -161,42 +180,39 @@ struct ui *ui_init(struct editor *ved) {
 	XSetWMProtocols(ui->dpy, ui->w, &ui->atoms.wm_delete_window, 1);
 
 	// Scrolling
+	// FIXME: This is a mess of ugly nested ifs. Refactor to use a ui_init_xi2 function
 	ui->input.scroll_v.reset = true;
+	ui->input.use_xi2 = false;
 	ui->text.scroll = 0.0;
 
 	int event, error, xi_maj = 2, xi_min = 1;
 	if (!XQueryExtension(ui->dpy, "XInputExtension", &ui->input.opcode, &event, &error)
 			|| XIQueryVersion(ui->dpy, &xi_maj, &xi_min) == BadRequest) {
 		fprintf(stderr, "Error initialising XInput2. Falling back to legacy mouse button scrolling.\n");
-		ui->input.use_xi2 = false;
 	} else {
 		int xi_ndev;
 		XIDeviceInfo *xi_info = XIQueryDevice(ui->dpy, XIAllMasterDevices, &xi_ndev);
 		for (int i = 0; i < xi_ndev; ++i) {
-			for (int j = 0; j < xi_info[i].num_classes; ++j) {
-				XIScrollClassInfo *scroll = (XIScrollClassInfo *)xi_info[i].classes[j];
-				if (scroll->type != XIScrollClass) continue;
-				// TODO: consider supporting horizontal scrolling
-				if (scroll->scroll_type != XIScrollTypeVertical) continue;
-
+			if (ui_update_xi2_scroll(ui, xi_info[i].classes, xi_info[i].num_classes)) {
 				ui->input.device = xi_info[i].deviceid;
-				ui->input.scroll_v.valuator = scroll->number;
-				ui->input.scroll_v.increment = scroll->increment;
+				ui->input.use_xi2 = true;
 				break;
 			}
 		}
 
-		XIEventMask xi_emask = {
-			.deviceid = ui->input.device,
-			.mask_len = 1,
-			.mask = (unsigned char [1]){ 0 },
-		};
-		XISetMask(xi_emask.mask, XI_DeviceChanged);
-		XISetMask(xi_emask.mask, XI_Motion);
-		XISetMask(xi_emask.mask, XI_Enter);
-		XISelectEvents(ui->dpy, ui->w, &xi_emask, 1);
-
-		ui->input.use_xi2 = true;
+		if (ui->input.use_xi2) {
+			XIEventMask xi_emask = {
+				.deviceid = ui->input.device,
+				.mask_len = 1,
+				.mask = (unsigned char [1]){ 0 },
+			};
+			XISetMask(xi_emask.mask, XI_DeviceChanged);
+			XISetMask(xi_emask.mask, XI_Motion);
+			XISetMask(xi_emask.mask, XI_Enter);
+			XISelectEvents(ui->dpy, ui->w, &xi_emask, 1);
+		} else {
+			fprintf(stderr, "Could not find vertical scroll valuator with XInput2. Falling back to legacy mouse button scrolling.\n");
+		}
 	}
 
 	// Colours
