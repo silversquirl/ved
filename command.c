@@ -4,7 +4,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <string.h>
-#include <X11/keysym.h>
+#include <strings.h>
 #include "command.h"
 #include "ui_internal.h"
 #include "util.h"
@@ -12,7 +12,7 @@
 #define CMD_ALLOC_INIT 32
 
 struct command_matcher {
-	KeySym sym;
+	vtk_key key;
 	struct command_node *node;
 };
 
@@ -79,36 +79,50 @@ static int cmd_add_option(struct command_node *node, struct command_matcher opt)
 	return 0;
 }
 
-static inline struct command_matcher *cmd_find_option(struct command_node *node, KeySym sym) {
+static inline struct command_matcher *cmd_find_option(struct command_node *node, vtk_key key) {
 	for (size_t i = 0; i < node->n; ++i)
-		if (node->options[i].sym == sym) return node->options + i;
+		if (node->options[i].key == key) return node->options + i;
 	return NULL;
 }
 
-static inline struct command_matcher *cmd_find_option_by_keycode(struct command_node *node, Display *dpy, KeyCode c) {
-	for (size_t i = 0; i < node->n; ++i)
-		if (XKeysymToKeycode(dpy, node->options[i].sym) == c)
-			return node->options + i;
-	return NULL;
-}
-
-static KeySym parse_keysym(char **s) {
+static vtk_key parse_key(char **s) {
 	char *p;
-	KeySym ret;
+	vtk_key ret;
 	switch (**s) {
 	case '<':
+		++*s;
 		p = strchr(*s, '>');
-		if (!p) return NoSymbol;
+		if (!p) return VTK_K_NONE;
 		*p = '\0';
-		ret = XStringToKeysym(*s + 1);
+
+		// FIXME: Would be nice if vtk provided this
+		if (!strcasecmp(*s, "BACKSPACE")) ret = VTK_K_BACKSPACE;
+		else if (!strcasecmp(*s, "TAB")) ret = VTK_K_TAB;
+		else if (!strcasecmp(*s, "RETURN")) ret = VTK_K_RETURN;
+		else if (!strcasecmp(*s, "ESCAPE")) ret = VTK_K_ESCAPE;
+		else if (!strcasecmp(*s, "SPACE")) ret = VTK_K_SPACE;
+		else if (!strcasecmp(*s, "DELETE")) ret = VTK_K_DELETE;
+		else if (!strcasecmp(*s, "INSERT")) ret = VTK_K_INSERT;
+
+		else if (!strcasecmp(*s, "PAGE UP")) ret = VTK_K_PAGE_UP;
+		else if (!strcasecmp(*s, "PAGE DOWN")) ret = VTK_K_PAGE_DOWN;
+		else if (!strcasecmp(*s, "HOME")) ret = VTK_K_HOME;
+		else if (!strcasecmp(*s, "END")) ret = VTK_K_END;
+		else if (!strcasecmp(*s, "UP")) ret = VTK_K_UP;
+		else if (!strcasecmp(*s, "DOWN")) ret = VTK_K_DOWN;
+		else if (!strcasecmp(*s, "LEFT")) ret = VTK_K_LEFT;
+		else if (!strcasecmp(*s, "RIGHT")) ret = VTK_K_RIGHT;
+
+		else return VTK_K_NONE;
+
 		*s = p + 1;
 		return ret;
 
 	case '\\':
 		++*s;
 	default:
-		if (**s >= XK_space && **s <= XK_asciitilde) return *(*s)++;
-		return NoSymbol;
+		if (**s >= ' ' && **s <= '~') return *(*s)++;
+		return VTK_K_NONE;
 	}
 }
 
@@ -117,10 +131,10 @@ int cmd_register(struct commands *cmds, char *keys, command_callback cb, void *u
 	struct command_matcher opt, *tmp;
 	bool leaf;
 	do {
-		if ((opt.sym = parse_keysym(&keys)) == NoSymbol) return -2;
+		if ((opt.key = parse_key(&keys)) == VTK_K_NONE) return -2;
 		leaf = !*keys;
 
-		tmp = cmd_find_option(node, opt.sym);
+		tmp = cmd_find_option(node, opt.key);
 		if (tmp) {
 			if (tmp->node->leaf || leaf) return -3;
 		} else {
@@ -137,8 +151,8 @@ int cmd_register(struct commands *cmds, char *keys, command_callback cb, void *u
 	return 0;
 }
 
-int cmd_handle_key(struct commands *cmds, struct ui *ui, unsigned int keycode) {
-	struct command_matcher *m = cmd_find_option_by_keycode(cmds->current, ui->dpy, keycode);
+int cmd_handle_key(struct commands *cmds, struct ui *ui, int key) {
+	struct command_matcher *m = cmd_find_option(cmds->current, key);
 	if (!m) {
 		cmd_reset_pos(cmds);
 		return -1;

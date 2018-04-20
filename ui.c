@@ -1,9 +1,7 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <errno.h>
-#include <cairo-xlib.h>
-#include <X11/Xutil.h>
-#include <X11/extensions/XInput2.h>
+#include <vtk.h>
 #include "ui_internal.h"
 
 #define UI_TEXT_PADDING 5
@@ -18,12 +16,18 @@ static inline bool ui_view_at_eof(struct ui *ui) {
 	return ui->ved->buffer.file.len == ui->ved->buffer.edit.end;
 }
 
+static inline int ui_height_target(struct ui *ui) {
+	int h;
+	vtk_window_get_size(ui->win, NULL, &h);
+	return h - ui->text.scroll + 1;
+}
+
 static void ui_damage_buffer(void *uip) {
 	struct ui *ui = uip;
 	struct buffer *buf = &ui->ved->buffer;
 	bool eof = false;
 
-	const int target = ui->dim.h - ui->text.scroll + 1;
+	const int target = ui_height_target(ui);
 	do {
 		switch (buf_view_extend(buf)) {
 		case 0: // Success
@@ -42,7 +46,7 @@ static void ui_damage_buffer(void *uip) {
 static bool ui_shrink_buffer(struct ui *ui) {
 	struct buffer *buf = &ui->ved->buffer;
 
-	const int target = ui->dim.h - ui->text.scroll + 1;
+	const int target = ui_height_target(ui);
 	size_t decrement = 0;
 	while (ui_text_height(ui) > target) {
 		decrement += EDIT_ALLOC_STEP;
@@ -59,50 +63,75 @@ static bool ui_shrink_buffer(struct ui *ui) {
 }
 
 static inline void ui_set_colour(struct ui *ui, struct colour c) {
-	cairo_set_source_rgba(ui->draw.cr, c.r, c.g, c.b, c.a);
+	cairo_set_source_rgba(ui->cr, c.r, c.g, c.b, c.a);
 }
 
-static void ui_render(struct ui *ui) {
-	cairo_push_group(ui->draw.cr);
+static void ui_set_pango_size(struct ui *ui) {
+	int w;
+	vtk_window_get_size(ui->win, &w, NULL);
+	w -= UI_TEXT_PADDING * 2;
+	w *= PANGO_SCALE;
+	pango_layout_set_width(ui->text.l, w);
+}
 
-	cairo_translate(ui->draw.cr, 0, 0);
-	cairo_rectangle(ui->draw.cr, 0, 0, ui->dim.w, ui->dim.h);
+static void ui_close(vtk_event ev, void *u) {
+	struct ui *ui = u;
+	ui_quit(ui);
+}
+
+static void ui_draw(vtk_event ev, void *u) {
+	struct ui *ui = u;
+	int w, h;
+	vtk_window_get_size(ui->win, &w, &h);
+
+	cairo_translate(ui->cr, 0, 0);
+	cairo_rectangle(ui->cr, 0, 0, w, h);
 	ui_set_colour(ui, ui->colours.bg);
-	cairo_fill(ui->draw.cr);
+	cairo_fill(ui->cr);
 
-	cairo_translate(ui->draw.cr, 0, ui->text.scroll);
+	cairo_translate(ui->cr, 0, ui->text.scroll);
 
 	// Draw lines above and below the text
 	ui_set_colour(ui, ui->colours.esof);
-	cairo_set_line_width(ui->draw.cr, 1);
-	const double sx = UI_TEXT_PADDING, ex = ui->dim.w - UI_TEXT_PADDING * 2;
+	cairo_set_line_width(ui->cr, 1);
+	const double sx = UI_TEXT_PADDING, ex = w - UI_TEXT_PADDING * 2;
 
-	cairo_move_to(ui->draw.cr, sx, 0);
-	cairo_line_to(ui->draw.cr, ex, 0);
-	cairo_stroke(ui->draw.cr);
+	cairo_move_to(ui->cr, sx, 0);
+	cairo_line_to(ui->cr, ex, 0);
+	cairo_stroke(ui->cr);
 
 	const double y = ui_text_height(ui);
-	cairo_move_to(ui->draw.cr, sx, y);
-	cairo_line_to(ui->draw.cr, ex, y);
-	cairo_stroke(ui->draw.cr);
+	cairo_move_to(ui->cr, sx, y);
+	cairo_line_to(ui->cr, ex, y);
+	cairo_stroke(ui->cr);
 
 	// TODO: configurable indentation
 	// TODO: elastic tabstops (see http://nickgravgaard.com/elastic-tabstops/)
-	cairo_move_to(ui->draw.cr, UI_TEXT_PADDING, 0);
+	cairo_move_to(ui->cr, UI_TEXT_PADDING, 0);
 	ui_set_colour(ui, ui->colours.fg);
-	pango_cairo_show_layout(ui->draw.cr, ui->text.l);
-
-	cairo_pop_group_to_source(ui->draw.cr);
-	XClearWindow(ui->dpy, ui->w);
-	cairo_paint(ui->draw.cr);
-	cairo_surface_flush(ui->draw.surf);
-	XFlush(ui->dpy);
+	pango_cairo_show_layout(ui->cr, ui->text.l);
 }
 
-static void ui_scroll(struct ui *ui, double delta) {
-	ui->text.scroll += delta * ui->text.line_height * 1.5;
+static void ui_keypress(vtk_event ev, void *u) {
+	struct ui *ui = u;
+	cmd_handle_key(ui->ved->modes.current, ui, ev.key.key);
+}
 
-	double scroll_max = ui->dim.h / 2.;
+static void ui_resize(vtk_event ev, void *u) {
+	struct ui *ui = u;
+	pango_cairo_update_layout(ui->cr, ui->text.l);
+	ui_set_pango_size(ui);
+	ui_damage_buffer(ui);
+}
+
+static void ui_scroll(vtk_event ev, void *u) {
+	struct ui *ui = u;
+	ui->text.scroll += ev.scroll.amount * ui->text.line_height * 1.5;
+
+	int h;
+	vtk_window_get_size(ui->win, NULL, &h);
+
+	double scroll_max = h / 2.;
 	if (ui->text.scroll > scroll_max)
 		ui->text.scroll = scroll_max;
 
@@ -112,110 +141,10 @@ static void ui_scroll(struct ui *ui, double delta) {
 			ui->text.scroll = scroll_min;
 	}
 
-	if (ui_text_height(ui) > ui->dim.h - ui->text.scroll + 1)
+	if (ui_text_height(ui) > h - ui->text.scroll + 1)
 		ui_shrink_buffer(ui);
 	ui_damage_buffer(ui);
-	ui_render(ui);
-}
-
-static void ui_resize(struct ui *ui) {
-	cairo_xlib_surface_set_size(ui->draw.surf, ui->dim.w, ui->dim.h);
-	pango_cairo_update_layout(ui->draw.cr, ui->text.l);
-
-	int w = PANGO_SCALE * (ui->dim.w - UI_TEXT_PADDING * 2);
-	pango_layout_set_width(ui->text.l, w);
-
-	ui->ved->buffer.damage_cb(ui->ved->buffer.damage_data);
-}
-
-// True means scroll valuator was found, false means not
-static bool ui_update_xi2_scroll(struct ui *ui, XIAnyClassInfo **classes, int nclass) {
-	for (int i = 0; i < nclass; ++i) {
-		XIScrollClassInfo *scroll = (XIScrollClassInfo *)classes[i];
-		if (scroll->type != XIScrollClass) continue;
-		// TODO: consider supporting horizontal scrolling
-		if (scroll->scroll_type != XIScrollTypeVertical) continue;
-
-		ui->input.scroll_v.valuator = scroll->number;
-		ui->input.scroll_v.increment = scroll->increment;
-
-		// Change of valuators means we need to reset the scroll value
-		ui->input.scroll_v.reset = true;
-
-		return true;
-	}
-	return false;
-}
-
-static void ui_keypress(struct ui *ui, XKeyEvent xk) {
-	cmd_handle_key(ui->ved->modes.current, ui, xk.keycode);
-}
-
-static void ui_keyrelease(struct ui *ui, XKeyEvent xk) {
-	// TODO: key releases
-}
-
-static void ui_buttonpress(struct ui *ui, XButtonEvent xb) {
-	switch (xb.button) {
-	case 4:
-		if (!ui->input.use_xi2)
-			ui_scroll(ui, +1);
-		break;
-	case 5:
-		if (!ui->input.use_xi2)
-			ui_scroll(ui, -1);
-		break;
-	case 6:
-	case 7:
-		// TODO: consider supporting horizontal scrolling
-		break;
-
-	default:
-		printf("Button %d\n", xb.button);
-		break;
-	}
-}
-
-static void ui_xinput(struct ui *ui, XGenericEventCookie xc) {
-	XIDeviceChangedEvent *dc;
-	XIDeviceEvent *de;
-	XIEnterEvent *ee;
-
-	switch (xc.evtype) {
-	case XI_DeviceChanged:
-		dc = xc.data;
-		// Ignore return because we don't care if it's not a scroll valuator change
-		ui_update_xi2_scroll(ui, dc->classes, dc->num_classes);
-		break;
-
-	case XI_Motion:
-		de = xc.data;
-		for (int b = 0, i = 0; b < de->valuators.mask_len; ++b) {
-			for (int n = 0; de->valuators.mask[b] >> n; ++n) {
-				if ((de->valuators.mask[b] >> n) & 1) {
-					int bit = b * CHAR_BIT + n;
-					if (bit == ui->input.scroll_v.valuator) {
-						double val = de->valuators.values[i];
-						if (ui->input.scroll_v.reset) {
-							ui->input.scroll_v.reset = false;
-						} else {
-							double delta = ui->input.scroll_v.val - val;
-							ui_scroll(ui, delta / ui->input.scroll_v.increment);
-						}
-						ui->input.scroll_v.val = val;
-					}
-					++i;
-				}
-			}
-		}
-		break;
-
-	case XI_Enter:
-		ee = xc.data;
-		if (ee->evtype == XI_Enter && ee->mode == XINotifyNormal)
-			ui->input.scroll_v.reset = true;
-		break;
-	}
+	vtk_window_redraw(ui->win);
 }
 
 struct ui *ui_init(struct editor *ved) {
@@ -223,81 +152,22 @@ struct ui *ui_init(struct editor *ved) {
 	if (!ui) return NULL;
 	ui->ved = ved;
 
-	// X11
-	ui->dpy = XOpenDisplay(NULL);
-	if (!ui->dpy) {
-		fprintf(stderr, "Could not open display\n");
-		free(ui);
+	// vtk
+	int err;
+	if ((err = vtk_new(&ui->root))) {
+		fprintf(stderr, "Error creating vtk root: %s\n", vtk_strerr(err));
 		return NULL;
 	}
-	int scr = DefaultScreen(ui->dpy);
-
-	XVisualInfo visinfo;
-	if (!XMatchVisualInfo(ui->dpy, scr, 32, TrueColor, &visinfo)) {
-		fprintf(stderr, "Could not find suitable visual\n");
-		free(ui);
+	if ((err = vtk_window_new(&ui->win, ui->root, "ved", 0, 0, 800, 600))) {
+		fprintf(stderr, "Error creating vtk window: %s\n", vtk_strerr(err));
 		return NULL;
 	}
 
-	XSetWindowAttributes wattr = {
-		.colormap = XCreateColormap(ui->dpy, DefaultRootWindow(ui->dpy), visinfo.visual, AllocNone),
-		.background_pixel = BlackPixel(ui->dpy, scr),
-		.border_pixel = BlackPixel(ui->dpy, scr),
-	};
-	ui->w = XCreateWindow(
-		ui->dpy,
-		DefaultRootWindow(ui->dpy),
-		0, 0, 800, 600, 0,
-		visinfo.depth, InputOutput, visinfo.visual,
-		CWColormap | CWBackPixel | CWBorderPixel, &wattr);
-
-	long events = 0;
-	events |= StructureNotifyMask; // Tells us when the window resizes
-	events |= ExposureMask; // Tells us when to redraw
-	events |= KeyPressMask | KeyReleaseMask; // Keyboard events
-	events |= KeymapStateMask; // Keyboard state on window entry
-	events |= ButtonPressMask | ButtonReleaseMask; // Button events
-	XSelectInput(ui->dpy, ui->w, events);
-	ui->exit = false;
-
-	ui->atoms.wm_delete_window = XInternAtom(ui->dpy, "WM_DELETE_WINDOW", false);
-	XSetWMProtocols(ui->dpy, ui->w, &ui->atoms.wm_delete_window, 1);
-
-	// Scrolling
-	// FIXME: This is a mess of ugly nested ifs. Refactor to use a ui_init_xi2 function
-	ui->input.scroll_v.reset = true;
-	ui->input.use_xi2 = false;
-	ui->text.scroll = 0.0;
-
-	int event, error, xi_maj = 2, xi_min = 1;
-	if (!XQueryExtension(ui->dpy, "XInputExtension", &ui->input.opcode, &event, &error)
-			|| XIQueryVersion(ui->dpy, &xi_maj, &xi_min) == BadRequest) {
-		fprintf(stderr, "Error initialising XInput2. Falling back to legacy mouse button scrolling.\n");
-	} else {
-		int xi_ndev;
-		XIDeviceInfo *xi_info = XIQueryDevice(ui->dpy, XIAllMasterDevices, &xi_ndev);
-		for (int i = 0; i < xi_ndev; ++i) {
-			if (ui_update_xi2_scroll(ui, xi_info[i].classes, xi_info[i].num_classes)) {
-				ui->input.device = xi_info[i].deviceid;
-				ui->input.use_xi2 = true;
-				break;
-			}
-		}
-
-		if (ui->input.use_xi2) {
-			XIEventMask xi_emask = {
-				.deviceid = ui->input.device,
-				.mask_len = 1,
-				.mask = (unsigned char [1]){ 0 },
-			};
-			XISetMask(xi_emask.mask, XI_DeviceChanged);
-			XISetMask(xi_emask.mask, XI_Motion);
-			XISetMask(xi_emask.mask, XI_Enter);
-			XISelectEvents(ui->dpy, ui->w, &xi_emask, 1);
-		} else {
-			fprintf(stderr, "Could not find vertical scroll valuator with XInput2. Falling back to legacy mouse button scrolling.\n");
-		}
-	}
+	vtk_window_set_event_handler(ui->win, VTK_EV_CLOSE, ui_close, ui);
+	vtk_window_set_event_handler(ui->win, VTK_EV_DRAW, ui_draw, ui);
+	vtk_window_set_event_handler(ui->win, VTK_EV_KEY_PRESS, ui_keypress, ui);
+	vtk_window_set_event_handler(ui->win, VTK_EV_RESIZE, ui_resize, ui);
+	vtk_window_set_event_handler(ui->win, VTK_EV_SCROLL, ui_scroll, ui);
 
 	// Colours
 	ui->colours.fg	= (struct colour){ 1, 1, 1, 1 };
@@ -305,12 +175,11 @@ struct ui *ui_init(struct editor *ved) {
 	ui->colours.esof	= (struct colour){ .5, .5, .5, 1 };
 
 	// Cairo
-	ui->draw.surf = cairo_xlib_surface_create(ui->dpy, ui->w, visinfo.visual, ui->dim.w, ui->dim.h);
-	ui->draw.cr = cairo_create(ui->draw.surf);
-	cairo_translate(ui->draw.cr, 0, 0);
+	ui->cr = vtk_window_get_cairo(ui->win);
+	cairo_translate(ui->cr, 0, 0);
 
 	// Pango
-	ui->text.l = pango_cairo_create_layout(ui->draw.cr);
+	ui->text.l = pango_cairo_create_layout(ui->cr);
 	pango_layout_set_wrap(ui->text.l, PANGO_WRAP_WORD_CHAR);
 
 	PangoFontDescription *fdesc = pango_font_description_from_string("Helvetica 11");
@@ -328,24 +197,19 @@ struct ui *ui_init(struct editor *ved) {
 
 	pango_font_description_free(fdesc);
 
+	ui_set_pango_size(ui);
+
 	// Buffer drawing
 	ui->ved->buffer.damage_cb = ui_damage_buffer;
 	ui->ved->buffer.damage_data = ui;
-
-	// Force a size configuration
-	ui_resize(ui);
 
 	return ui;
 }
 
 void ui_free(struct ui *ui) {
 	g_object_unref(ui->text.l);
-
-	cairo_surface_finish(ui->draw.surf);
-	cairo_destroy(ui->draw.cr);
-	cairo_surface_destroy(ui->draw.surf);
-
-	XDestroyWindow(ui->dpy, ui->w);
+	vtk_window_destroy(ui->win);
+	vtk_destroy(ui->root);
 	free(ui);
 }
 
@@ -354,60 +218,9 @@ void ui_set_quit_cb(struct ui *ui, bool (*cb)(struct ui *)) {
 }
 
 void ui_quit(struct ui *ui) {
-	if (!ui->quit_cb || ui->quit_cb(ui))
-		ui->exit = true;
+	if (!ui->quit_cb || ui->quit_cb(ui)) vtk_window_close(ui->win);
 }
 
 void ui_mainloop(struct ui *ui) {
-	XMapWindow(ui->dpy, ui->w);
-	XEvent e;
-	while (!ui->exit) {
-		XNextEvent(ui->dpy, &e);
-		switch (e.type) {
-		case Expose:
-			ui_render(ui);
-			break;
-
-		case ConfigureNotify:
-			if (e.xconfigure.width != ui->dim.w || e.xconfigure.height != ui->dim.h) {
-				ui->dim.w = e.xconfigure.width;
-				ui->dim.h = e.xconfigure.height;
-				ui_resize(ui);
-				ui_render(ui);
-			}
-
-		case MappingNotify:
-			// Detect changes to the keyboard mapping
-			switch (e.xmapping.request) {
-			case MappingModifier:
-			case MappingKeyboard:
-				XRefreshKeyboardMapping(&e.xmapping);
-				break;
-			}
-
-		case KeyPress:
-			ui_keypress(ui, e.xkey);
-			break;
-
-		case KeyRelease:
-			ui_keyrelease(ui, e.xkey);
-			break;
-
-		case ButtonPress:
-			ui_buttonpress(ui, e.xbutton);
-			break;
-
-		case GenericEvent:
-			if (e.xgeneric.extension == ui->input.opcode && XGetEventData(ui->dpy, &e.xcookie)) {
-				ui_xinput(ui, e.xcookie);
-				XFreeEventData(ui->dpy, &e.xcookie);
-			}
-			break;
-
-		case ClientMessage:
-			if (e.xclient.data.l[0] == ui->atoms.wm_delete_window)
-				ui_quit(ui);
-			break;
-		}
-	}
+	vtk_window_mainloop(ui->win);
 }

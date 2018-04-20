@@ -4,6 +4,7 @@
 
 #include <pango/pangocairo.h>
 #include <X11/Xlib.h>
+#include <vtk.h>
 #include "ui.h"
 
 struct colour { double r, g, b, a; };
@@ -11,27 +12,9 @@ struct colour { double r, g, b, a; };
 struct ui {
 	struct editor *ved;
 
-	Display *dpy;
-	Window w;
-	struct { unsigned w, h; } dim;
-	bool exit;
-
-	struct {
-		Atom wm_delete_window;
-	} atoms;
-
-	struct {
-		bool use_xi2;
-		int opcode, device;
-
-		struct {
-			int valuator;
-			double increment;
-
-			bool reset;
-			double val;
-		} scroll_v;
-	} input;
+	vtk root;
+	vtk_window win;
+	cairo_t *cr;
 
 	struct {
 		struct colour
@@ -39,11 +22,6 @@ struct ui {
 			bg,	// Window background
 			esof;	// End/start of file line foreground
 	} colours;
-
-	struct {
-		cairo_surface_t *surf;
-		cairo_t *cr;
-	} draw;
 
 	struct {
 		PangoLayout *l;

@@ -20,7 +20,7 @@ void cmd_free(struct commands *cmds);
 int cmd_register(struct commands *cmds, char *keys, command_callback cb, void *userdata);
 
 // Returns 0 if branch found, -1 if not found, 1 if command executed
-int cmd_handle_key(struct commands *cmds, struct ui *ui, unsigned int keycode);
+int cmd_handle_key(struct commands *cmds, struct ui *ui, int key);
 
 void cmd_reset_pos(struct commands *cmds);
 
