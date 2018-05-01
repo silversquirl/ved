@@ -28,15 +28,20 @@ func (buf Buffer) AtEOF() bool {
 	return buf.eof
 }
 
-func (buf Buffer) ExtendView(step int) error {
+func (buf *Buffer) ExtendView(step int) error {
 	off := len(buf.buf)
-	buf.buf = append(buf.buf, make([]byte, step)...)
-	off, err := buf.r.ReadAt(buf.buf, int64(off))
-	if err != io.EOF {
+	tmp := make([]byte, step)
+	n, err := buf.r.ReadAt(tmp, int64(off))
+	if err == io.EOF {
 		buf.eof = true
 	} else if err != nil {
 		return err
 	}
-	buf.end += off
+	buf.buf = append(buf.buf, tmp[:n]...)
+	buf.end += n
 	return nil
+}
+
+func (buf Buffer) Text() string {
+	return string(buf.buf)
 }

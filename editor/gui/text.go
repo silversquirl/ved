@@ -4,19 +4,22 @@ import (
 	"../buffer"
 	"go.vktec.org.uk/gopan"
 	"go.vktec.org.uk/gopan/vtkcairo"
-	"go.vktec.org.uk/vtk"
+	"log"
 )
 
-const TextPadding = 5
+const (
+	TextPadding = 5
+	ViewStepSize = 1024
+)
 
 type TextView struct {
-	w vtk.Window
+	ui *UI
 	l gopancairo.CairoLayout
-	buf buffer.Buffer
-	scroll, scrollStep float64
+	buf *buffer.Buffer
+	scrollStep float64
 }
 
-func (ui UI) NewTextView() TextView {
+func (ui *UI) NewTextView() TextView {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
 
@@ -29,7 +32,7 @@ func (ui UI) NewTextView() TextView {
 	desc := metrics.Descent()
 	lineHeight := (asc + desc) / gopan.Scale
 
-	return TextView{ ui.win, l, ui.ved.Buf, 0.0, 1.5 * float64(lineHeight) }
+	return TextView{ ui, l, &ui.ved.Buf, 1.5 * float64(lineHeight) }
 }
 
 func (t TextView) Draw() {
@@ -46,26 +49,15 @@ func (t TextView) Height() int {
 
 func (t TextView) Resize() {
 	t.l.Update()
-}
-
-func (t TextView) ScrollBy(amount float64) {
-	_, h := t.w.Size()
-	scrollMax := float64(h) / 2
-
-	t.scroll += amount * t.scrollStep
-	if t.scroll > scrollMax {
-		t.scroll = scrollMax
-	}
-
-	if t.buf.AtEOF() {
-		scrollMin := scrollMax - float64(t.Height())
-		if t.scroll < scrollMin {
-			t.scroll = scrollMin
-		}
-	}
-
 	t.damage()
 }
 
-func (t TextView) damage() {
+func (t *TextView) damage() {
+	target := t.ui.heightTarget() + 10 // + 10 to give it some extra space
+	for !t.buf.AtEOF() && t.Height() < target {
+		if err := t.buf.ExtendView(ViewStepSize); err != nil {
+			log.Println(err)
+		}
+		t.l.SetText(t.buf.Text())
+	}
 }

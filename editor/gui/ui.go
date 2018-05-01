@@ -16,6 +16,7 @@ type UI struct {
 	colours ColourScheme
 	cr cairo.Cairo
 	text TextView
+	scrollDelta float64
 }
 
 func New(ved editor.Editor) (ui *UI, err error) {
@@ -56,7 +57,7 @@ func (ui *UI) draw(_ vtk.Event) {
 	ui.colours.Background.SetCairo(ui.cr)
 	ui.cr.Fill()
 
-	ui.cr.Translate(0, ui.text.scroll)
+	ui.cr.Translate(0, ui.scrollDelta)
 
 	// Draw EOF and SOF lines
 	ui.colours.Line.SetCairo(ui.cr)
@@ -79,8 +80,32 @@ func (ui *UI) draw(_ vtk.Event) {
 
 func (ui *UI) scroll(ev vtk.Event) {
 	scroll := ev.(vtk.ScrollEvent)
-	ui.text.ScrollBy(scroll.Amount())
+	ui.scrollBy(scroll.Amount())
 	ui.win.Redraw()
+}
+
+func (ui *UI) scrollBy(amount float64) {
+	_, h := ui.win.Size()
+	scrollMax := float64(h) / 2
+
+	ui.scrollDelta += amount * ui.text.scrollStep
+	if ui.scrollDelta > scrollMax {
+		ui.scrollDelta = scrollMax
+	}
+
+	if ui.text.buf.AtEOF() {
+		scrollMin := scrollMax - float64(ui.text.Height())
+		if ui.scrollDelta < scrollMin {
+			ui.scrollDelta = scrollMin
+		}
+	}
+
+	ui.text.damage()
+}
+
+func (ui UI) heightTarget() int {
+	_, h := ui.win.Size()
+	return h - int(ui.scrollDelta);
 }
 
 func (ui *UI) Quit() {
