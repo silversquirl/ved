@@ -11,10 +11,10 @@ type Buffer struct {
 		io.ReaderAt
 		io.Closer
 	}
-	buf            []byte
-	end            int
-	eof            bool
-	damageCallback func()
+	buf      []byte
+	end      int
+	eof      bool
+	DamageCB func()
 }
 
 func New(filename string) (buf Buffer, err error) {
@@ -45,3 +45,5 @@ func (buf *Buffer) ExtendView(step int) error {
 func (buf Buffer) Text() string {
 	return string(buf.buf)
 }
+
+// TODO: editing functions. Make sure they call DamageCB

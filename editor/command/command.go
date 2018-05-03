@@ -1,3 +1,5 @@
+// TODO: modifiers (eg. <Ctrl-A>, <Super-@>, etc.)
+// TODO: edit mode. Possible approach through wildcard commands?
 package command
 
 import (

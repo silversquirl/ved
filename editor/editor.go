@@ -19,6 +19,8 @@ func New(filename string) (ved Editor, err error) {
 		return
 	}
 
+	// TODO: mode switching
+	// TODO: edit mode
 	ved.Modes.Command = command.New()
 	ved.Modes.Edit = command.New()
 	ved.Modes.Current = &ved.Modes.Command
