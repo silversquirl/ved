@@ -86,7 +86,7 @@ func parseKeybind(bind string) (keys []vtk.Key, err error) {
 			if i < 0 {
 				return nil, InvalidBindError
 			}
-			k := parseKey(bind[:i])
+			k := vtk.KeyFromString(bind[:i])
 			if k == 0 {
 				return nil, InvalidBindError
 			} else {
@@ -108,42 +108,4 @@ func parseKeybind(bind string) (keys []vtk.Key, err error) {
 		bind = bind[i:]
 	}
 	return
-}
-
-func parseKey(key string) vtk.Key {
-	// FIXME: This should be done in vtk
-	switch strings.ToLower(key) {
-	case "backspace":
-		return vtk.Backspace
-	case "tab":
-		return vtk.Tab
-	case "return":
-		return vtk.Return
-	case "escape":
-		return vtk.Escape
-	case "space":
-		return vtk.Space
-	case "delete":
-		return vtk.Delete
-	case "insert":
-		return vtk.Insert
-	case "pageup":
-		return vtk.PageUp
-	case "pagedown":
-		return vtk.PageDown
-	case "home":
-		return vtk.Home
-	case "end":
-		return vtk.End
-	case "up":
-		return vtk.Up
-	case "down":
-		return vtk.Down
-	case "left":
-		return vtk.Left
-	case "right":
-		return vtk.Right
-	default:
-		return 0
-	}
 }
