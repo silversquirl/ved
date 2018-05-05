@@ -13,7 +13,8 @@ type Editor struct {
 	}
 }
 
-func New(filename string) (ved Editor, err error) {
+func New(filename string) (ved *Editor, err error) {
+	ved = new(Editor)
 	ved.Buf, err = buffer.New(filename)
 	if err != nil {
 		return

@@ -11,5 +11,5 @@ func (c Colour) SetCairo(cr cairo.Cairo) {
 }
 
 type ColourScheme struct {
-	Foreground, Background, Line Colour
+	Foreground, Background, Line, BarBG Colour
 }

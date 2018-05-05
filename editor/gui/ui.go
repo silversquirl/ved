@@ -17,6 +17,7 @@ type UI struct {
 	cr cairo.Cairo
 	text TextView
 	scrollDelta float64
+	status StatusBar
 }
 
 func New(ved *editor.Editor) (ui *UI, err error) {
@@ -33,9 +34,11 @@ func New(ved *editor.Editor) (ui *UI, err error) {
 	ui.colours.Foreground = Colour{1, 1, 1, 1}
 	ui.colours.Background = Colour{0, 0, 0, .6}
 	ui.colours.Line = Colour{.5, .5, .5, 1}
+	ui.colours.BarBG = Colour{.1, .1, .1, 1}
 
 	ui.cr = ui.win.Cairo()
 	ui.text = ui.NewTextView()
+	ui.status = ui.NewStatusBar()
 
 	ui.win.SetEventHandler(vtk.Close, func(_ vtk.Event) { ui.Quit() })
 	ui.win.SetEventHandler(vtk.Draw, ui.draw)
@@ -48,22 +51,17 @@ func New(ved *editor.Editor) (ui *UI, err error) {
 	return
 }
 
-func (ui *UI) draw(_ vtk.Event) {
-	w, h := ui.win.Size()
+func (ui *UI) Redraw() {
+	ui.win.Redraw()
+}
 
-	ui.cr = ui.win.Cairo()
-	ui.cr.Translate(0, 0)
-	ui.cr.Rectangle(0, 0, float64(w), float64(h))
-	ui.colours.Background.SetCairo(ui.cr)
-	ui.cr.Fill()
-
-	ui.cr.Translate(0, ui.scrollDelta)
-
+func (ui *UI) drawFile(fw float64) {
 	// Draw EOF and SOF lines
 	ui.colours.Line.SetCairo(ui.cr)
 	ui.cr.SetLineWidth(1)
-	sx := float64(TextPadding)
-	ex := float64(w - TextPadding * 2)
+	pad := float64(TextPadding)
+	sx := pad
+	ex := fw - pad * 2
 
 	ui.cr.MoveTo(sx, 0)
 	ui.cr.LineTo(ex, 0)
@@ -74,8 +72,33 @@ func (ui *UI) draw(_ vtk.Event) {
 	ui.cr.LineTo(ex, y)
 	ui.cr.Stroke()
 
+	// Draw text
 	ui.colours.Foreground.SetCairo(ui.cr)
 	ui.text.Draw()
+}
+
+func (ui *UI) draw(_ vtk.Event) {
+	w, h := ui.win.Size()
+	fw, fh := float64(w), float64(h)
+	// ui.cr = ui.win.Cairo()
+
+	// Window coordinates
+	ui.cr.Translate(0, 0)
+
+	// Fill background
+	ui.cr.Rectangle(0, 0, fw, fh)
+	ui.colours.Background.SetCairo(ui.cr)
+	ui.cr.Fill()
+
+	// Draw the file
+	ui.cr.PushGroup() // Makes Translate not affect outer group
+	ui.cr.Translate(0, ui.scrollDelta)
+	ui.drawFile(fw)
+	ui.cr.PopGroupToSource()
+	ui.cr.Paint()
+
+	// Draw status bar
+	ui.status.Draw(fw, fh)
 }
 
 func (ui *UI) scroll(ev vtk.Event) {

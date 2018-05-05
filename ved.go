@@ -11,7 +11,7 @@ func main() {
 		panic(err) // TODO: don't panic
 	}
 
-	ui, err := gui.New(&ved)
+	ui, err := gui.New(ved)
 	if err != nil {
 		panic(err) // TODO: don't panic
 	}
@@ -22,10 +22,12 @@ func main() {
 
 	ved.Modes.Command.Add("i", func() {
 		ved.Modes.Current = &ved.Modes.Edit
+		ui.Redraw()
 	})
 
 	ved.Modes.Edit.Add("<Escape>", func() {
 		ved.Modes.Current = &ved.Modes.Command
+		ui.Redraw()
 	})
 
 	ui.Mainloop()
