@@ -7,7 +7,7 @@ import (
 )
 
 type UI struct {
-	ved editor.Editor
+	ved *editor.Editor
 
 	root vtk.Root
 	win vtk.Window
@@ -19,7 +19,7 @@ type UI struct {
 	scrollDelta float64
 }
 
-func New(ved editor.Editor) (ui *UI, err error) {
+func New(ved *editor.Editor) (ui *UI, err error) {
 	ui = new(UI)
 	ui.ved = ved
 

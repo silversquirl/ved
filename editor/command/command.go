@@ -99,7 +99,7 @@ func parseKeybind(bind string) (keys []vtk.Key, err error) {
 		default:
 			r, n := utf8.DecodeRuneInString(bind[i:])
 			i += n
-			if ' ' <= ch && ch <= '~' {
+			if ' ' <= r && r <= '~' {
 				keys = append(keys, vtk.Key(r))
 			} else {
 				return nil, InvalidBindError
