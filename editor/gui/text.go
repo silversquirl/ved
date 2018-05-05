@@ -49,6 +49,8 @@ func (t TextView) Height() int {
 
 func (t TextView) Resize() {
 	t.l.Update()
+	w, _ := t.ui.win.Size()
+	t.l.SetWidth((w - TextPadding * 2) * gopan.Scale)
 	t.damage()
 }
 
