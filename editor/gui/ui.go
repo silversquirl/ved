@@ -14,6 +14,8 @@ type UI struct {
 	QuitCallback func() bool
 
 	colours ColourScheme
+	fonts Fonts
+
 	cr cairo.Cairo
 	text TextView
 	scrollDelta float64
@@ -35,6 +37,8 @@ func New(ved *editor.Editor) (ui *UI, err error) {
 	ui.colours.Background = Colour{0, 0, 0, .6}
 	ui.colours.Line = Colour{.5, .5, .5, 1}
 	ui.colours.BarBG = Colour{.1, .1, .1, 1}
+
+	ui.fonts = NewFonts()
 
 	ui.cr = ui.win.Cairo()
 	ui.text = ui.NewTextView()

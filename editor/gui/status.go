@@ -14,9 +14,7 @@ type StatusBar struct {
 func (ui *UI) NewStatusBar() StatusBar {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
-	// TODO: DRY this up (move fonts to UI struct?)
-	fdesc := gopan.FontDescriptionFromString("Helvetica 11")
-	l.SetFontDescription(fdesc)
+	l.SetFontDescription(ui.fonts.Regular)
 	return StatusBar{ui, l}
 }
 

@@ -23,10 +23,9 @@ func (ui *UI) NewTextView() TextView {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
 
-	fdesc := gopan.FontDescriptionFromString("Helvetica 11")
-	l.SetFontDescription(fdesc)
+	l.SetFontDescription(ui.fonts.Regular)
 
-	font := gopancairo.DefaultFontMap().LoadFont(l.Context(), fdesc)
+	font := gopancairo.DefaultFontMap().LoadFont(l.Context(), ui.fonts.Regular)
 	metrics := font.Metrics()
 	asc := metrics.Ascent()
 	desc := metrics.Descent()
