@@ -3,6 +3,7 @@ package editor
 import (
 	"./buffer"
 	"./command"
+	"go.vktec.org.uk/vtk"
 )
 
 type Editor struct {
@@ -13,6 +14,14 @@ type Editor struct {
 	}
 }
 
+func (ved *Editor) editHandler(path []vtk.Key) []vtk.Key {
+	k, rest := path[0], path[1:]
+	if ' ' <= k && k <= '~'  || k == '\n' || k == '\t' {
+		println("Inserted printable character")
+	}
+	return rest
+}
+
 func New(filename string) (ved *Editor, err error) {
 	ved = new(Editor)
 	ved.Buf, err = buffer.New(filename)
@@ -21,8 +30,8 @@ func New(filename string) (ved *Editor, err error) {
 	}
 
 	ved.Modes.Command = command.New()
-	// TODO: edit mode through default key handler
 	ved.Modes.Edit = command.New()
+	ved.Modes.Edit.Default = ved.editHandler
 	ved.Modes.Current = &ved.Modes.Command
 
 	return

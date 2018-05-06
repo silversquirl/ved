@@ -26,7 +26,7 @@ type Command func()
 type CommandSet struct {
 	root CommandMap
 	path []vtk.Key
-	Default func(path []vtk.Key) (needMore bool)
+	Default func(path []vtk.Key) (newPath []vtk.Key)
 }
 
 func New() CommandSet {
@@ -50,10 +50,12 @@ func (cs *CommandSet) HandleKey(ev vtk.KeyEvent) {
 	path := append(cs.path, ev.Key())
 	n := cs.get(path)
 	if n == nil {
-		if cs.Default != nil && cs.Default(path) {
-			cs.path = path
-		} else {
+		if cs.Default == nil {
 			cs.cancel()
+		} else if p := cs.Default(path); len(p) == 0 {
+			cs.cancel()
+		} else {
+			cs.path = p
 		}
 		return
 	}
