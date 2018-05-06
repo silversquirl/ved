@@ -20,8 +20,8 @@ func New(filename string) (ved *Editor, err error) {
 		return
 	}
 
-	// TODO: edit mode
 	ved.Modes.Command = command.New()
+	// TODO: edit mode through default key handler
 	ved.Modes.Edit = command.New()
 	ved.Modes.Current = &ved.Modes.Command
 

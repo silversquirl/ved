@@ -1,5 +1,4 @@
 // TODO: modifiers (eg. <Ctrl-A>, <Super-@>, etc.)
-// TODO: edit mode. Possible approach through wildcard commands?
 package command
 
 import (
@@ -25,19 +24,43 @@ type CommandMap map[vtk.Key]CommandNode
 type Command func()
 
 type CommandSet struct {
-	root, cur CommandMap
+	root CommandMap
+	path []vtk.Key
+	Default func(path []vtk.Key) (needMore bool)
 }
 
 func New() CommandSet {
 	m := make(CommandMap)
-	return CommandSet{m, m}
+	return CommandSet{m, nil, nil}
+}
+
+func (cs CommandSet) get(path []vtk.Key) CommandNode {
+	cur := CommandNode(cs.root)
+	for _, k := range path {
+		if m, ok := cur.(CommandMap); ok {
+			cur = m[k]
+		} else {
+			return nil
+		}
+	}
+	return cur
 }
 
 func (cs *CommandSet) HandleKey(ev vtk.KeyEvent) {
-	n := cs.cur[ev.Key()]
+	path := append(cs.path, ev.Key())
+	n := cs.get(path)
+	if n == nil {
+		if cs.Default != nil && cs.Default(path) {
+			cs.path = path
+		} else {
+			cs.cancel()
+		}
+		return
+	}
+
 	switch n := n.(type) {
 	case CommandMap:
-		cs.cur = n
+		cs.path = path
 	case Command:
 		n()
 		cs.cancel()
@@ -74,7 +97,8 @@ func (cs *CommandSet) Add(bind string, cmd func()) error {
 }
 
 func (cs *CommandSet) cancel() {
-	cs.cur = cs.root
+	// Unlike setting to nil, this preserves the allocated memory
+	cs.path = cs.path[:0]
 }
 
 func parseKeybind(bind string) (keys []vtk.Key, err error) {
