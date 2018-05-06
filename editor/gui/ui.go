@@ -17,7 +17,7 @@ type UI struct {
 	fonts Fonts
 
 	cr cairo.Cairo
-	text TextView
+	text *TextView
 	scrollDelta float64
 	status StatusBar
 }

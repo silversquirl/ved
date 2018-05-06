@@ -17,7 +17,7 @@ type Editor struct {
 func (ved *Editor) editHandler(path []vtk.Key) []vtk.Key {
 	k, rest := path[0], path[1:]
 	if ' ' <= k && k <= '~'  || k == '\n' || k == '\t' {
-		println("Inserted printable character")
+		ved.Buf.InsertChar(byte(k))
 	}
 	return rest
 }

@@ -19,7 +19,7 @@ type TextView struct {
 	scrollStep float64
 }
 
-func (ui *UI) NewTextView() TextView {
+func (ui *UI) NewTextView() *TextView {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
 
@@ -31,12 +31,18 @@ func (ui *UI) NewTextView() TextView {
 	desc := metrics.Descent()
 	lineHeight := (asc + desc) / gopan.Scale
 
-	return TextView{ ui, l, &ui.ved.Buf, 1.5 * float64(lineHeight) }
+	t := &TextView{ ui, l, &ui.ved.Buf, 1.5 * float64(lineHeight) }
+	ui.ved.Buf.DamageCB = func() {
+		t.damage()
+		t.ui.Redraw()
+	}
+	return t
 }
 
 func (t TextView) Draw() {
 	// TODO: configurable indentation
 	// TODO: elastic tabstops (see http://nickgravgaard.com/elastic-tabstops/)
+	// TODO: draw cursor
 	t.l.Cr.MoveTo(TextPadding, 0)
 	t.l.Show()
 }
@@ -55,6 +61,7 @@ func (t TextView) Resize() {
 
 func (t *TextView) damage() {
 	target := t.ui.heightTarget() + 10 // + 10 to give it some extra space
+	t.l.SetText(t.buf.Text())
 	for !t.buf.AtEOF() && t.Height() < target {
 		if err := t.buf.ExtendView(ViewStepSize); err != nil {
 			log.Println(err)

@@ -30,5 +30,13 @@ func main() {
 		ui.Redraw()
 	})
 
+	ved.Modes.Edit.Add("<Backspace>", func() {
+		ved.Buf.Delete(-1)
+	})
+
+	ved.Modes.Edit.Add("<Delete>", func() {
+		ved.Buf.Delete(1)
+	})
+
 	ui.Mainloop()
 }
