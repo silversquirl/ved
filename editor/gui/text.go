@@ -23,9 +23,10 @@ func (ui *UI) NewTextView() *TextView {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
 
-	l.SetFontDescription(ui.fonts.Regular)
+	tag := ui.GetTag("")
+	ApplyTag(tag, l.Layout, buffer.ByteRange{ 0, -1 })
 
-	font := gopancairo.DefaultFontMap().LoadFont(l.Context(), ui.fonts.Regular)
+	font := gopancairo.DefaultFontMap().LoadFont(l.Context(), tag.Font)
 	metrics := font.Metrics()
 	asc := metrics.Ascent()
 	desc := metrics.Descent()

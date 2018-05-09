@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"../buffer"
 	"go.vktec.org.uk/gopan"
 	"go.vktec.org.uk/gopan/vtkcairo"
 	"strings"
@@ -14,7 +15,7 @@ type StatusBar struct {
 func (ui *UI) NewStatusBar() StatusBar {
 	l := gopancairo.CreateLayout(ui.win.Cairo())
 	l.SetWrap(gopan.WordChar)
-	l.SetFontDescription(ui.fonts.Regular)
+	ApplyTag(ui.GetTag("status"), l.Layout, buffer.ByteRange{ 0, -1 })
 	return StatusBar{ui, l}
 }
 
@@ -43,10 +44,9 @@ func (s *StatusBar) Draw(w, h float64) {
 	y := h - float64(barh)
 
 	s.l.Cr.Rectangle(0, y, w, float64(barh))
-	s.ui.colours.BarBG.SetCairo(s.l.Cr)
+	s.l.Cr.SetSourceColor(s.ui.GetTag("status").Background)
 	s.l.Cr.Fill()
 
 	s.l.Cr.MoveTo(TextPadding, y)
-	s.ui.colours.Foreground.SetCairo(s.l.Cr)
 	s.l.Show()
 }

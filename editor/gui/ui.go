@@ -2,8 +2,11 @@ package gui
 
 import (
 	"../"
+	"../buffer"
+	"go.vktec.org.uk/gopan"
 	"go.vktec.org.uk/vtk"
 	"go.vktec.org.uk/vtk/cairo"
+	"image/color"
 )
 
 type UI struct {
@@ -13,8 +16,7 @@ type UI struct {
 	win vtk.Window
 	QuitCallback func() bool
 
-	colours ColourScheme
-	fonts Fonts
+	tags map[string]buffer.Tag
 
 	cr cairo.Cairo
 	text *TextView
@@ -33,12 +35,30 @@ func New(ved *editor.Editor) (ui *UI, err error) {
 
 	ui.win, err = ui.root.NewWindow("ved", 0, 0, 800, 600)
 
-	ui.colours.Foreground = Colour{1, 1, 1, 1}
-	ui.colours.Background = Colour{0, 0, 0, .6}
-	ui.colours.Line = Colour{.5, .5, .5, 1}
-	ui.colours.BarBG = Colour{.1, .1, .1, 1}
+	ui.tags = make(map[string]buffer.Tag)
+	ui.tags["window"] = buffer.Tag{
+		-1,
+		color.RGBA{255, 255, 255, 255},
+		color.RGBA{0, 0, 0, 150},
+		0,
+		gopan.FontDescriptionFromString("Helvetica 11"),
+	}
 
-	ui.fonts = NewFonts()
+	ui.tags[""] = buffer.Tag{
+		Mask: buffer.SetForeground | buffer.SetFont,
+		Foreground: color.RGBA{255, 255, 255, 255},
+		Font: gopan.FontDescriptionFromString("Helvetica 11"),
+	}
+
+	ui.tags["line"] = buffer.Tag{
+		Mask: buffer.SetForeground,
+		Foreground: color.RGBA{128, 128, 128, 255},
+	}
+
+	ui.tags["status"] = buffer.Tag{
+		Mask: buffer.SetBackground,
+		Background: color.RGBA{26, 26, 26, 255},
+	}
 
 	ui.cr = ui.win.Cairo()
 	ui.text = ui.NewTextView()
@@ -61,7 +81,7 @@ func (ui *UI) Redraw() {
 
 func (ui *UI) drawFile(fw float64) {
 	// Draw EOF and SOF lines
-	ui.colours.Line.SetCairo(ui.cr)
+	ui.cr.SetSourceColor(ui.GetTag("line").Foreground)
 	ui.cr.SetLineWidth(1)
 	pad := float64(TextPadding)
 	sx := pad
@@ -77,7 +97,6 @@ func (ui *UI) drawFile(fw float64) {
 	ui.cr.Stroke()
 
 	// Draw text
-	ui.colours.Foreground.SetCairo(ui.cr)
 	ui.text.Draw()
 }
 
@@ -91,7 +110,7 @@ func (ui *UI) draw(_ vtk.Event) {
 
 	// Fill background
 	ui.cr.Rectangle(0, 0, fw, fh)
-	ui.colours.Background.SetCairo(ui.cr)
+	ui.cr.SetSourceColor(ui.GetTag("window").Background)
 	ui.cr.Fill()
 
 	// Draw the file
