@@ -3,7 +3,6 @@ package editor
 import (
 	"./buffer"
 	"./command"
-	"go.vktec.org.uk/vtk"
 )
 
 type Editor struct {
@@ -14,10 +13,10 @@ type Editor struct {
 	}
 }
 
-func (ved *Editor) editHandler(path []vtk.Key) []vtk.Key {
+func (ved *Editor) editHandler(path []command.Keybind) []command.Keybind {
 	k, rest := path[0], path[1:]
-	if ' ' <= k && k <= '~'  || k == '\n' || k == '\t' {
-		ved.Buf.InsertChar(byte(k))
+	if k.Mods == 0 && (' ' <= k.Key && k.Key <= '~'  || k.Key == '\n' || k.Key == '\t') {
+		ved.Buf.InsertChar(byte(k.Key))
 	}
 	return rest
 }

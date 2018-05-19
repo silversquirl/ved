@@ -1,4 +1,3 @@
-// TODO: modifiers (eg. <Ctrl-A>, <Super-@>, etc.)
 package command
 
 import (
@@ -20,21 +19,25 @@ type CommandNode interface {
 func (_ CommandMap) commandNode() {}
 func (_ Command) commandNode()    {}
 
-type CommandMap map[vtk.Key]CommandNode
+type Keybind struct {
+	Key vtk.Key
+	Mods vtk.Modifier
+}
+
+type CommandMap map[Keybind]CommandNode
 type Command func()
 
 type CommandSet struct {
 	root CommandMap
-	path []vtk.Key
-	Default func(path []vtk.Key) (newPath []vtk.Key)
+	path []Keybind
+	Default func(path []Keybind) (newPath []Keybind)
 }
 
 func New() CommandSet {
-	m := make(CommandMap)
-	return CommandSet{m, nil, nil}
+	return CommandSet{make(CommandMap), nil, nil}
 }
 
-func (cs CommandSet) get(path []vtk.Key) CommandNode {
+func (cs CommandSet) get(path []Keybind) CommandNode {
 	cur := CommandNode(cs.root)
 	for _, k := range path {
 		if m, ok := cur.(CommandMap); ok {
@@ -47,7 +50,7 @@ func (cs CommandSet) get(path []vtk.Key) CommandNode {
 }
 
 func (cs *CommandSet) HandleKey(ev vtk.KeyEvent) {
-	path := append(cs.path, ev.Key())
+	path := append(cs.path, Keybind{ev.Key(), ev.Mods()})
 	n := cs.get(path)
 	if n == nil {
 		if cs.Default == nil {
@@ -103,7 +106,7 @@ func (cs *CommandSet) cancel() {
 	cs.path = cs.path[:0]
 }
 
-func parseKeybind(bind string) (keys []vtk.Key, err error) {
+func parseKeybind(bind string) (keys []Keybind, err error) {
 	for i := 0; i < len(bind); {
 		switch bind[i] {
 		case '<':
@@ -112,8 +115,16 @@ func parseKeybind(bind string) (keys []vtk.Key, err error) {
 			if i < 0 {
 				return nil, InvalidBindError
 			}
-			k := vtk.KeyFromString(bind[:i])
-			if k == 0 {
+			mods := strings.Split(bind[:i], "-")
+			mods, key := mods[:len(mods)-1], mods[len(mods)-1]
+
+			k := Keybind{}
+			for _, m := range mods {
+				k.Mods |= vtk.ModifierFromString(m)
+			}
+
+			k.Key = vtk.KeyFromString(key)
+			if k.Key == 0 {
 				return nil, InvalidBindError
 			} else {
 				keys = append(keys, k)
@@ -126,7 +137,7 @@ func parseKeybind(bind string) (keys []vtk.Key, err error) {
 			r, n := utf8.DecodeRuneInString(bind[i:])
 			i += n
 			if ' ' <= r && r <= '~' {
-				keys = append(keys, vtk.Key(r))
+				keys = append(keys, Keybind{vtk.Key(r), 0})
 			} else {
 				return nil, InvalidBindError
 			}

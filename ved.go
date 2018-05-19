@@ -20,12 +20,21 @@ func main() {
 		ui.Quit()
 	})
 
+	ved.Modes.Command.Add("<C-[>", func() {
+		ui.Quit()
+	})
+
 	ved.Modes.Command.Add("i", func() {
 		ved.Modes.Current = &ved.Modes.Edit
 		ui.Redraw()
 	})
 
 	ved.Modes.Edit.Add("<Escape>", func() {
+		ved.Modes.Current = &ved.Modes.Command
+		ui.Redraw()
+	})
+
+	ved.Modes.Edit.Add("<C-[>", func() {
 		ved.Modes.Current = &ved.Modes.Command
 		ui.Redraw()
 	})
